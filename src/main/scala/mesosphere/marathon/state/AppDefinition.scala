@@ -9,9 +9,11 @@ import com.wix.accord.dsl._
 import mesosphere.marathon.Protos.Constraint
 import mesosphere.marathon.api.serialization._
 import mesosphere.marathon.api.v2.Validation._
+import mesosphere.marathon.api.v2.validation.NetworkValidation
 import mesosphere.marathon.core.externalvolume.ExternalVolumes
 import mesosphere.marathon.core.health._
 import mesosphere.marathon.core.plugin.PluginManager
+import mesosphere.marathon.core.pod.{ BridgeNetwork, ContainerNetwork, HostNetwork, Network }
 import mesosphere.marathon.core.readiness.ReadinessCheck
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.plugin.validation.RunSpecValidator
@@ -59,7 +61,7 @@ case class AppDefinition(
 
   override val container: Option[Container] = AppDefinition.DefaultContainer,
 
-  healthChecks: Set[_ <: HealthCheck] = AppDefinition.DefaultHealthChecks,
+  healthChecks: Set[HealthCheck] = AppDefinition.DefaultHealthChecks,
 
   readinessChecks: Seq[ReadinessCheck] = AppDefinition.DefaultReadinessChecks,
 
@@ -73,7 +75,7 @@ case class AppDefinition(
 
   acceptedResourceRoles: Set[String] = AppDefinition.DefaultAcceptedResourceRoles,
 
-  ipAddress: Option[IpAddress] = None,
+  networks: Seq[Network] = AppDefinition.DefaultNetworks,
 
   versionInfo: VersionInfo = VersionInfo.OnlyVersion(Timestamp.now()),
 
@@ -86,9 +88,11 @@ case class AppDefinition(
 
   import mesosphere.mesos.protos.Implicits._
 
+  require(networks.nonEmpty, "an application must declare requisite networks")
+
   require(
-    ipAddress.isEmpty || portDefinitions.isEmpty,
-    s"IP address ($ipAddress) and ports ($portDefinitions) are not allowed at the same time")
+    (!networks.exists(!_.eq(HostNetwork))) || portDefinitions.isEmpty,
+    s"non-host-mode networking ($networks) and ports/portDefinitions ($portDefinitions) are not allowed at the same time")
 
   val portNumbers: Seq[Int] = portDefinitions.map(_.port)
 
@@ -138,7 +142,7 @@ case class AppDefinition(
       .addResources(memResource)
       .addResources(diskResource)
       .addResources(gpusResource)
-      .addAllHealthChecks(healthChecks.map(_.toProto)(collection.breakOut))
+      .addAllHealthChecks(healthChecks.map(_.toProto))
       .setUpgradeStrategy(upgradeStrategy.toProto)
       .addAllDependencies(dependencies.map(_.toString))
       .addAllStoreUrls(storeUrls)
@@ -146,7 +150,7 @@ case class AppDefinition(
       .addAllSecrets(secrets.map(SecretsSerializer.toProto))
       .addAllEnvVarReferences(env.flatMap(EnvVarRefSerializer.toProto))
 
-    ipAddress.foreach { ip => builder.setIpAddress(ip.toProto) }
+    networks.foreach { network => builder.addNetworks(Network.toProto(network)) }
     container.foreach { c => builder.setContainer(ContainerSerializer.toProto(c)) }
     readinessChecks.foreach { r => builder.addReadinessCheckDefinition(ReadinessCheckSerializer.toProto(r)) }
     taskKillGracePeriod.foreach { t => builder.setTaskKillGracePeriod(t.toMillis) }
@@ -208,7 +212,8 @@ case class AppDefinition(
       else
         OnlyVersion(Timestamp(proto.getVersion))
 
-    val ipAddressOption = if (proto.hasIpAddress) Some(IpAddress.fromProto(proto.getIpAddress)) else None
+    // TODO(portMapping) instead of flattening, handle deser problems some other way?
+    val networks: Seq[Network] = proto.getNetworksList.flatMap(Network.fromProto)(collection.breakOut)
 
     val residencyOption = if (proto.hasResidency) Some(ResidencySerializer.fromProto(proto.getResidency)) else None
 
@@ -254,7 +259,7 @@ case class AppDefinition(
         if (proto.hasUpgradeStrategy) UpgradeStrategy.fromProto(proto.getUpgradeStrategy)
         else UpgradeStrategy.empty,
       dependencies = proto.getDependenciesList.map(PathId(_))(collection.breakOut),
-      ipAddress = ipAddressOption,
+      networks = if (networks.isEmpty) AppDefinition.DefaultNetworks else networks,
       residency = residencyOption,
       secrets = proto.getSecretsList.map(SecretsSerializer.fromProto)(collection.breakOut)
     )
@@ -266,15 +271,16 @@ case class AppDefinition(
   val servicePorts: Seq[Int] =
     container.withFilter(_.portMappings.nonEmpty).map(_.servicePorts).getOrElse(portNumbers)
 
+  /** should be kept in sync with [[mesosphere.marathon.api.v2.validation.AppValidation.portIndices]] */
   private val portIndices: Range = hostPorts.indices
 
   val hasDynamicServicePorts: Boolean = servicePorts.contains(AppDefinition.RandomPortValue)
 
   val networkModeBridge: Boolean =
-    container.exists(_.docker.exists(_.network.contains(mesos.ContainerInfo.DockerInfo.Network.BRIDGE)))
+    networks.collect { case _: BridgeNetwork => true }.nonEmpty // OK for now, as long as exclusive w/ container
 
   val networkModeUser: Boolean =
-    container.exists(_.docker.exists(_.network.contains(mesos.ContainerInfo.DockerInfo.Network.USER)))
+    networks.collect { case _: ContainerNetwork => true }.nonEmpty // OK for now, as long as exclusive w/ bridge
 
   def mergeFromProto(bytes: Array[Byte]): AppDefinition = {
     val proto = Protos.ServiceDefinition.parseFrom(bytes)
@@ -312,7 +318,7 @@ case class AppDefinition(
           upgradeStrategy != to.upgradeStrategy ||
           labels != to.labels ||
           acceptedResourceRoles != to.acceptedResourceRoles ||
-          ipAddress != to.ipAddress ||
+          networks != to.networks ||
           readinessChecks != to.readinessChecks ||
           residency != to.residency ||
           secrets != to.secrets
@@ -340,22 +346,13 @@ case class AppDefinition(
     copy(id = baseId, dependencies = dependencies.map(_.canonicalPath(baseId)))
   }
 
-  def portAssignments(task: Task): Seq[PortAssignment] = {
-    def fromDiscoveryInfo: Seq[PortAssignment] = ipAddress.flatMap {
-      case IpAddress(_, _, DiscoveryInfo(appPorts), _) =>
-        for {
-          launched <- task.launched
-          effectiveIpAddress <- task.effectiveIpAddress(this)
-        } yield appPorts.zip(launched.hostPorts).map {
-          case (appPort, hostPort) =>
-            PortAssignment(
-              portName = Some(appPort.name),
-              effectiveIpAddress = Some(effectiveIpAddress),
-              effectivePort = hostPort,
-              hostPort = Some(hostPort))
-        }.toList
-    }.getOrElse(Nil)
+  val usesNonHostNetworking = networks.exists(_ != HostNetwork)
+  val usesContainerNetworking = networks.exists {
+    case _: ContainerNetwork => true
+    case _ => false
+  }
 
+  def portAssignments(task: Task): Seq[PortAssignment] = {
     @SuppressWarnings(Array("OptionGet", "TraversableHead"))
     def fromPortMappings(container: Container): Seq[PortAssignment] =
       task.launched.map { launched =>
@@ -371,7 +368,7 @@ case class AppDefinition(
             }
 
           val effectivePort =
-            if (ipAddress.isDefined || portMapping.hostPort.isEmpty) {
+            if (usesContainerNetworking || portMapping.hostPort.isEmpty) {
               portMapping.containerPort
             } else {
               hostPort.get
@@ -398,19 +395,15 @@ case class AppDefinition(
     }.getOrElse(Nil)
 
     container.collect {
-      // TODO(portMappings) support other container types (bridge and user modes are docker-specific)
-      case c: Container if networkModeBridge || networkModeUser => fromPortMappings(c)
-    }.getOrElse(if (ipAddress.isDefined) fromDiscoveryInfo else fromPortDefinitions)
+      case c: Container if usesNonHostNetworking => fromPortMappings(c)
+    }.getOrElse(fromPortDefinitions)
   }
 
   val portNames: Seq[String] = {
-    def fromDiscoveryInfo = ipAddress.map(_.discoveryInfo.ports.map(_.name).toList).getOrElse(Seq.empty)
     def fromPortMappings = container.map(_.portMappings.flatMap(_.name)).getOrElse(Seq.empty)
     def fromPortDefinitions = portDefinitions.flatMap(_.name)
 
-    if (networkModeBridge || networkModeUser) fromPortMappings
-    else if (ipAddress.isDefined) fromDiscoveryInfo
-    else fromPortDefinitions
+    if (usesNonHostNetworking) fromPortMappings else fromPortDefinitions
   }
 }
 
@@ -455,7 +448,7 @@ object AppDefinition extends GeneralPurposeCombinators {
 
   val DefaultStoreUrls = Seq.empty[String]
 
-  val DefaultPortDefinitions: Seq[PortDefinition] = Seq(RandomPortDefinition)
+  val DefaultPortDefinitions: Seq[PortDefinition] = Nil
 
   val DefaultRequirePorts: Boolean = false
 
@@ -497,6 +490,11 @@ object AppDefinition extends GeneralPurposeCombinators {
     */
   val DefaultAcceptedResourceRoles = Set.empty[String]
 
+  /**
+    * should be kept in sync with [[mesosphere.marathon.api.v2.AppNormalization.DefaultNetworks]]
+    */
+  val DefaultNetworks = Seq[Network](HostNetwork)
+
   val DefaultResidency = Option.empty[Residency]
 
   def fromProto(proto: Protos.ServiceDefinition): AppDefinition =
@@ -532,17 +530,9 @@ object AppDefinition extends GeneralPurposeCombinators {
     new Validator[AppDefinition] {
       override def apply(app: AppDefinition): Result = {
         val plugins = pluginManager.plugins[RunSpecValidator]
-        new And(plugins: _*)(app)
+        new And(plugins: _*).apply(app)
       }
     }
-
-  private def complyWithIpAddressRules(app: AppDefinition): Validator[IpAddress] = {
-    import mesos.ContainerInfo.DockerInfo.Network.{ BRIDGE, USER }
-    isTrue[IpAddress]("ipAddress/discovery is not allowed for Docker containers using BRIDGE or USER networks") { ip =>
-      !(ip.discoveryInfo.nonEmpty &&
-        app.container.exists(_.docker.exists(_.network.exists(Set(BRIDGE, USER)))))
-    }
-  }
 
   private val complyWithResidencyRules: Validator[AppDefinition] =
     isTrue("AppDefinition must contain persistent volumes and define residency") { app =>
@@ -698,7 +688,8 @@ object AppDefinition extends GeneralPurposeCombinators {
     appDef must complyWithSingleInstanceLabelRules
     appDef must complyWithUpgradeStrategyRules
     appDef.constraints.each must complyWithConstraintRules
-    appDef.ipAddress must optional(complyWithIpAddressRules(appDef))
+    appDef.networks is valid(NetworkValidation.modelNetworksValidator)
+    appDef.networks is every(NetworkValidation.modelNetworkValidator)
   } and ExternalVolumes.validApp and EnvVarValue.validApp
 
   @SuppressWarnings(Array("TraversableHead"))

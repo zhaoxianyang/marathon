@@ -4,20 +4,18 @@ package api.v2
 import java.util.Collections
 
 import mesosphere.marathon.api.v2.json.Formats._
-import mesosphere.marathon.api.v2.json.GroupUpdate
 import mesosphere.marathon.api.{ TestAuthFixture, TestGroupManagerFixture }
 import mesosphere.marathon.core.appinfo._
 import mesosphere.marathon.core.group.GroupManager
+import mesosphere.marathon.raml.{ App, GroupUpdate }
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state._
 import mesosphere.marathon.storage.repository.GroupRepository
 import mesosphere.marathon.test.{ GroupCreation, MarathonSpec, Mockito }
-import mesosphere.marathon.{ ConflictingChangeException, MarathonConf, UnknownGroupException }
 import org.scalatest.{ GivenWhenThen, Matchers }
 import play.api.libs.json.{ JsObject, Json }
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
 
 class GroupsResourceTest extends MarathonSpec with Matchers with Mockito with GivenWhenThen with GroupCreation {
   test("dry run update") {
@@ -25,8 +23,8 @@ class GroupsResourceTest extends MarathonSpec with Matchers with Mockito with Gi
     useRealGroupManager()
     groupRepository.root() returns Future.successful(createRootGroup())
 
-    val app = AppDefinition(id = "/test/app".toRootPath, cmd = Some("test cmd"))
-    val update = GroupUpdate(id = Some("/test".toRootPath), apps = Some(Set(app)))
+    val app = App(id = "/test/app", cmd = Some("test cmd"))
+    val update = GroupUpdate(id = Some("/test"), apps = Some(Set(app)))
 
     When("Doing a dry run update")
     val body = Json.stringify(Json.toJson(update)).getBytes
@@ -52,8 +50,8 @@ class GroupsResourceTest extends MarathonSpec with Matchers with Mockito with Gi
     val rootGroup = createRootGroup().makeGroup(PathId("/foo/bla"))
     groupRepository.root() returns Future.successful(rootGroup)
 
-    val app = AppDefinition(id = "/foo/bla/app".toRootPath, cmd = Some("test cmd"))
-    val update = GroupUpdate(id = Some("/foo/bla".toRootPath), apps = Some(Set(app)))
+    val app = App(id = "/foo/bla/app", cmd = Some("test cmd"))
+    val update = GroupUpdate(id = Some("/foo/bla"), apps = Some(Set(app)))
 
     When("Doing a dry run update")
     val body = Json.stringify(Json.toJson(update)).getBytes
@@ -233,7 +231,7 @@ class GroupsResourceTest extends MarathonSpec with Matchers with Mockito with Gi
     groupRepository.root() returns Future.successful(rootGroup)
 
     When("creating a group with the same path existing app")
-    val body = Json.stringify(Json.toJson(GroupUpdate(id = Some("/group/app".toRootPath))))
+    val body = Json.stringify(Json.toJson(GroupUpdate(id = Some("/group/app"))))
 
     Then("we get a 409")
     intercept[ConflictingChangeException] { groupsResource.create(false, body.getBytes, auth.request) }
@@ -246,7 +244,7 @@ class GroupsResourceTest extends MarathonSpec with Matchers with Mockito with Gi
     groupRepository.root() returns Future.successful(rootGroup)
 
     When("creating a group with the same path existing app")
-    val body = Json.stringify(Json.toJson(GroupUpdate(id = Some("/group".toRootPath))))
+    val body = Json.stringify(Json.toJson(GroupUpdate(id = Some("/group"))))
 
     Then("we get a 409")
     intercept[ConflictingChangeException] { groupsResource.create(false, body.getBytes, auth.request) }
@@ -262,12 +260,10 @@ class GroupsResourceTest extends MarathonSpec with Matchers with Mockito with Gi
 
   before {
     auth = new TestAuthFixture
-    config = mock[MarathonConf]
+    config = AllConf.withTestConfig("--zk_timeout", "1000")
     groupManager = mock[GroupManager]
     groupInfo = mock[GroupInfoService]
     groupsResource = new GroupsResource(groupManager, groupInfo, config)(auth.auth, auth.auth)
-
-    config.zkTimeoutDuration returns 1.second
   }
 
   private[this] def useRealGroupManager(): Unit = {

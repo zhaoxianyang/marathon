@@ -4,27 +4,23 @@ package api.v2.json
 import com.wix.accord._
 import mesosphere.Unstable
 import mesosphere.marathon.api.JsonTestHelper
-import mesosphere.marathon.api.v2.ValidationHelper
-import mesosphere.marathon.core.health.HealthCheck
+import mesosphere.marathon.api.v2.Validation.validateOrThrow
+import mesosphere.marathon.api.v2.{ AppNormalization, ValidationHelper }
+import mesosphere.marathon.api.v2.validation.AppValidation
 import mesosphere.marathon.core.readiness.ReadinessCheckTestHelper
-import mesosphere.marathon.state.Container._
-import mesosphere.marathon.state.DiscoveryInfo.Port
-import mesosphere.marathon.state.PathId._
+import mesosphere.marathon.raml.{ AppCContainer, AppUpdate, Artifact, Container, ContainerPortMapping, DockerContainer, EngineType, Environment, Network, NetworkMode, PortDefinition, PortDefinitions, Raml, SecretDef, UpgradeStrategy }
 import mesosphere.marathon.state._
+import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.test.MarathonSpec
+import org.apache.mesos.{ Protos => Mesos }
 import org.scalatest.Matchers
-import play.api.data.validation.ValidationError
-import play.api.libs.json.{ JsError, JsPath, Json }
+import play.api.libs.json.Json
 
 import scala.collection.immutable.Seq
-import scala.concurrent.duration._
-import scala.util.Try
 
 class AppUpdateTest extends MarathonSpec with Matchers {
-  import Formats._
-  import mesosphere.marathon.integration.setup.V2TestFormats._
+  implicit val appUpdateValidator: Validator[AppUpdate] = AppValidation.validateCanonicalAppUpdateAPI(Set("secrets"))
 
-  implicit val appUpdateValidator = AppUpdate.appUpdateValidator(Set())
   val runSpecId = PathId("/test")
 
   def shouldViolate(update: AppUpdate, path: String, template: String): Unit = {
@@ -53,8 +49,8 @@ class AppUpdateTest extends MarathonSpec with Matchers {
 
     shouldViolate(
       update.copy(portDefinitions = Some(Seq(
-        PortDefinition(port = 9000, name = Some("foo")),
-        PortDefinition(port = 9001, name = Some("foo"))))
+        PortDefinition(9000, name = Some("foo")),
+        PortDefinition(9001, name = Some("foo"))))
       ),
       "/portDefinitions",
       "Port names must be unique."
@@ -62,8 +58,8 @@ class AppUpdateTest extends MarathonSpec with Matchers {
 
     shouldNotViolate(
       update.copy(portDefinitions = Some(Seq(
-        PortDefinition(port = 9000, name = Some("foo")),
-        PortDefinition(port = 9001, name = Some("bar"))))
+        PortDefinition(9000, name = Some("foo")),
+        PortDefinition(9001, name = Some("bar"))))
       ),
       "/portDefinitions",
       "Port names must be unique."
@@ -79,28 +75,32 @@ class AppUpdateTest extends MarathonSpec with Matchers {
     val update = AppUpdate()
 
     shouldViolate(update.copy(secrets = Some(Map(
-      "a" -> Secret("")
+      "a" -> SecretDef("")
     ))), "/secrets(a)/source", "must not be empty")
 
     shouldViolate(update.copy(secrets = Some(Map(
-      "" -> Secret("a/b/c")
-    ))), "/secrets()", "must not be empty")
+      "" -> SecretDef("a/b/c")
+    ))), "/secrets()/", "must not be empty")
   }
 
+  /**
+    * @return an [[AppUpdate]] that's been normalized to canonical form
+    */
   private[this] def fromJsonString(json: String): AppUpdate = {
-    Json.fromJson[AppUpdate](Json.parse(json)).get
+    val update: AppUpdate = Json.fromJson[AppUpdate](Json.parse(json)).get
+    AppNormalization.forDeprecatedFields(validateOrThrow(update)(AppValidation.validateOldAppUpdateAPI))
   }
 
   test("SerializationRoundtrip for empty definition") {
-    val update0 = AppUpdate(container = Some(Container.Mesos()))
+    val update0 = AppUpdate(container = Some(Container(EngineType.Mesos)))
     JsonTestHelper.assertSerializationRoundtripWorks(update0)
   }
 
   test("SerializationRoundtrip for definition with simple AppC container") {
-    val update0 = AppUpdate(container = Some(Container.MesosAppC(
+    val update0 = AppUpdate(container = Some(Container(EngineType.Mesos, appc = Some(AppCContainer(
       image = "anImage",
       labels = Map("key" -> "foo", "value" -> "bar")
-    )))
+    )))))
     JsonTestHelper.assertSerializationRoundtripWorks(update0)
   }
 
@@ -109,25 +109,30 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       cmd = Some("sleep 60"),
       args = None,
       user = Some("nobody"),
-      env = Some(EnvVarValue(Map("LANG" -> "en-US"))),
+      env = Some(Environment("LANG" -> "en-US")),
       instances = Some(16),
       cpus = Some(2.0),
       mem = Some(256.0),
       disk = Some(1024.0),
       executor = Some("/opt/executors/bin/some.executor"),
-      constraints = Some(Set()),
-      fetch = Some(Seq(FetchUri(uri = "http://dl.corp.org/prodX-1.2.3.tgz"))),
-      backoff = Some(2.seconds),
+      constraints = Some(Nil),
+      fetch = Some(Seq(Artifact(uri = "http://dl.corp.org/prodX-1.2.3.tgz"))),
+      backoffSeconds = Some(2),
       backoffFactor = Some(1.2),
-      maxLaunchDelay = Some(1.minutes),
-      container = Some(Docker(
-        volumes = Nil,
-        image = "docker:///group/image"
+      maxLaunchDelaySeconds = Some(60),
+      container = Some(Container(
+        EngineType.Docker,
+        docker = Some(DockerContainer(
+          image = "docker:///group/image"
+        )),
+        portMappings = Seq(
+          ContainerPortMapping(containerPort = 80, name = Some("http"))
+        )
       )),
-      healthChecks = Some(Set[HealthCheck]()),
-      taskKillGracePeriod = Some(2.seconds),
-      dependencies = Some(Set[PathId]()),
-      upgradeStrategy = Some(UpgradeStrategy.empty),
+      healthChecks = Some(Seq.empty),
+      taskKillGracePeriodSeconds = Some(2),
+      dependencies = Some(Set.empty),
+      upgradeStrategy = Some(UpgradeStrategy(1, 1)),
       labels = Some(
         Map(
           "one" -> "aaa",
@@ -135,16 +140,10 @@ class AppUpdateTest extends MarathonSpec with Matchers {
           "three" -> "ccc"
         )
       ),
-      ipAddress = Some(IpAddress(
-        groups = Seq("a", "b", "c"),
-        labels = Map(
-          "foo" -> "bar",
-          "baz" -> "buzz"
-        ),
-        discoveryInfo = DiscoveryInfo(
-          ports = Seq(Port(name = "http", number = 80, protocol = "tcp"))
-        )
-      ))
+      networks = Some(Seq(Network(mode = NetworkMode.Container, labels = Map(
+        "foo" -> "bar",
+        "baz" -> "buzz"
+      ))))
     )
     JsonTestHelper.assertSerializationRoundtripWorks(update1)
   }
@@ -220,23 +219,13 @@ class AppUpdateTest extends MarathonSpec with Matchers {
     assert(readResult4 == update4)
   }
 
-  test("'version' field can only be combined with 'id'") {
-    assert(AppUpdate(version = Some(Timestamp.now())).onlyVersionOrIdSet)
-
-    assert(AppUpdate(id = Some("foo".toPath), version = Some(Timestamp.now())).onlyVersionOrIdSet)
-
-    intercept[IllegalArgumentException] {
-      AppUpdate(cmd = Some("foo"), version = Some(Timestamp.now()))
-    }
-  }
-
   test("acceptedResourceRoles of update is only applied when != None") {
     val app = AppDefinition(id = PathId("withAcceptedRoles"), acceptedResourceRoles = Set("a"))
 
-    val unchanged = AppUpdate().apply(app).copy(versionInfo = app.versionInfo)
+    val unchanged = Raml.fromRaml((AppUpdate(), app)).copy(versionInfo = app.versionInfo)
     assert(unchanged == app)
 
-    val changed = AppUpdate(acceptedResourceRoles = Some(Set("b"))).apply(app).copy(versionInfo = app.versionInfo)
+    val changed = Raml.fromRaml((AppUpdate(acceptedResourceRoles = Some(Set("b"))), app)).copy(versionInfo = app.versionInfo)
     assert(changed == app.copy(acceptedResourceRoles = Set("b")))
   }
 
@@ -248,12 +237,13 @@ class AppUpdateTest extends MarathonSpec with Matchers {
     )
 
     val updateCmd = AppUpdate(cmd = Some("sleep 2"))
-    assert(updateCmd(app).versionInfo == app.versionInfo)
+    assert(Raml.fromRaml((updateCmd, app)).versionInfo == app.versionInfo)
   }
 
   test("AppUpdate with a version and other changes are not allowed") {
-    val attempt = Try(AppUpdate(id = Some(PathId("/test")), cmd = Some("sleep 2"), version = Some(Timestamp(2))))
-    assert(attempt.failed.get.getMessage.contains("The 'version' field may only be combined with the 'id' field."))
+    val vfe = intercept[ValidationFailedException](validateOrThrow(
+      AppUpdate(id = Some("/test"), cmd = Some("sleep 2"), version = Some(Timestamp(2).toOffsetDateTime))))
+    assert(vfe.failure.violations.toString.contains("The 'version' field may only be combined with the 'id' field."))
   }
 
   test("update may not have both uris and fetch") {
@@ -266,9 +256,8 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       }
       """
 
-    import Formats._
-    val result = Json.fromJson[AppUpdate](Json.parse(json))
-    assert(result == JsError(ValidationError("You cannot specify both uris and fetch fields")))
+    val vfe = intercept[ValidationFailedException](validateOrThrow(fromJsonString(json)))
+    assert(vfe.failure.violations.toString.contains("may not be set in conjunction with fetch"))
   }
 
   test("update may not have both ports and portDefinitions") {
@@ -281,9 +270,8 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       }
       """
 
-    import Formats._
-    val result = Json.fromJson[AppUpdate](Json.parse(json))
-    assert(result == JsError(ValidationError("You cannot specify both ports and port definitions")))
+    val vfe = intercept[ValidationFailedException](validateOrThrow(fromJsonString(json)))
+    assert(vfe.failure.violations.toString.contains("cannot specify both ports and port definitions"))
   }
 
   test("update may not have duplicated ports") {
@@ -295,15 +283,14 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       }
       """
 
-    import Formats._
-    val result = Json.fromJson[AppUpdate](Json.parse(json))
-    assert(result == JsError(JsPath \ "ports", ValidationError("Ports must be unique.")))
+    val vfe = intercept[ValidationFailedException](validateOrThrow(fromJsonString(json)))
+    assert(vfe.failure.violations.toString.contains("ports must be unique"))
   }
 
   test("update JSON serialization preserves readiness checks") {
     val update = AppUpdate(
-      id = Some(PathId("/test")),
-      readinessChecks = Some(Seq(ReadinessCheckTestHelper.alternativeHttps))
+      id = Some("/test"),
+      readinessChecks = Some(Seq(ReadinessCheckTestHelper.alternativeHttpsRaml))
     )
     val json = Json.toJson(update)
     val reread = json.as[AppUpdate]
@@ -312,13 +299,13 @@ class AppUpdateTest extends MarathonSpec with Matchers {
 
   test("update readiness checks are applied to app") {
     val update = AppUpdate(
-      id = Some(PathId("/test")),
-      readinessChecks = Some(Seq(ReadinessCheckTestHelper.alternativeHttps))
+      id = Some("/test"),
+      readinessChecks = Some(Seq(ReadinessCheckTestHelper.alternativeHttpsRaml))
     )
     val app = AppDefinition(id = PathId("/test"))
-    val updated = update(app)
+    val updated = Raml.fromRaml((update, app))
 
-    assert(updated.readinessChecks == update.readinessChecks.get)
+    assert(update.readinessChecks.map(_.map(Raml.fromRaml(_))).contains(updated.readinessChecks))
   }
 
   test("empty app updateStrategy on persistent volumes") {
@@ -345,7 +332,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val strategy = update.empty("foo".toPath).upgradeStrategy
+    val strategy = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
     assert(strategy.minimumHealthCapacity == 0.5
       && strategy.maximumOverCapacity == 0)
   }
@@ -374,9 +361,8 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val residency = update.empty("foo".toPath).residency
-    assert(residency.isDefined)
-    assert(residency.forall(_ == Residency.defaultResidency))
+    val residency = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).residency
+    assert(residency.contains(Residency.defaultResidency))
   }
 
   test("empty app updateStrategy") {
@@ -403,7 +389,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val strategy = update.empty("foo".toPath).upgradeStrategy
+    val strategy = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
     assert(strategy.minimumHealthCapacity == 0.5
       && strategy.maximumOverCapacity == 0)
   }
@@ -437,9 +423,12 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val create = update.empty("/put-path-id".toPath)
+    val createdViaUpdate = AppUpdateHelper.withoutPriorAppDefinition(update, "/put-path-id".toPath)
     assert(update.container.isDefined)
-    assert(update.container == create.container)
+    assert(createdViaUpdate.container.contains(state.Container.Docker(
+      volumes = Seq(PersistentVolume("data", PersistentVolumeInfo(size = 100), mode = Mesos.Volume.Mode.RW)),
+      image = "anImage"
+    )), createdViaUpdate.container)
   }
 
   test("empty app persists existing residency") {
@@ -471,9 +460,9 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val create = update.empty("/app".toPath)
+    val create = AppUpdateHelper.withoutPriorAppDefinition(update, "/app".toPath)
     assert(update.residency.isDefined)
-    assert(update.residency == create.residency)
+    assert(update.residency.map(Raml.fromRaml(_)) == create.residency)
   }
 
   test("empty app persists existing upgradeStrategy") {
@@ -509,9 +498,9 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val create = update.empty("/app".toPath)
+    val create = AppUpdateHelper.withoutPriorAppDefinition(update, "/app".toPath)
     assert(update.upgradeStrategy.isDefined)
-    assert(update.upgradeStrategy.get == create.upgradeStrategy)
+    assert(update.upgradeStrategy.map(Raml.fromRaml(_)).contains(create.upgradeStrategy))
   }
 
   test("empty app residency") {
@@ -538,9 +527,8 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val residency = update.empty("foo".toPath).residency
-    assert(residency.isDefined)
-    assert(residency.forall(_ == Residency.defaultResidency))
+    val residency = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).residency
+    assert(residency.contains(Residency.defaultResidency))
   }
 
   test("empty app update strategy on external volumes") {
@@ -565,17 +553,27 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val strategy = update.empty("foo".toPath).upgradeStrategy
-    assert(strategy == UpgradeStrategy.forResidentTasks)
+    val strategy = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
+    assert(strategy == state.UpgradeStrategy.forResidentTasks)
   }
 
   test("container change in AppUpdate should be stored") {
-    val appDef = AppDefinition(id = runSpecId, container = Some(Docker()))
-    val appUpdate = AppUpdate(container = Some(Docker(portMappings = Seq(
-      Container.PortMapping(containerPort = 4000, protocol = "tcp")
-    ))))
-    val roundTrip = appUpdate(appDef)
-    roundTrip.container.get.portMappings should have size 1
-    roundTrip.container.get.portMappings.head.containerPort should be (4000)
+    val appDef = AppDefinition(id = runSpecId, container = Some(state.Container.Docker(image = "something")))
+    // add port mappings..
+    val appUpdate = AppUpdate(
+      container = Some(Container(
+        EngineType.Docker,
+        docker = Some(DockerContainer(image = "something")),
+        portMappings = Seq(
+          ContainerPortMapping(containerPort = 4000)
+        )
+      ))
+    )
+    val roundTrip = Raml.fromRaml((appUpdate, appDef))
+    roundTrip.container should be('nonEmpty)
+    roundTrip.container.foreach { container =>
+      container.portMappings should have size 1
+      container.portMappings.head.containerPort should be (4000)
+    }
   }
 }

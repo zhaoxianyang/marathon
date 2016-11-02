@@ -1,13 +1,12 @@
-package mesosphere.marathon.api.v2
+package mesosphere.marathon
+package api.v2
 
-import mesosphere.marathon.MarathonConf
-import mesosphere.marathon.stream._
 import mesosphere.marathon.api.TestAuthFixture
-import mesosphere.marathon.api.v2.json.Formats._
 import mesosphere.marathon.core.base.{ Clock, ConstantClock }
 import mesosphere.marathon.core.launcher.OfferMatchResult
 import mesosphere.marathon.core.launchqueue.LaunchQueue
 import mesosphere.marathon.core.launchqueue.LaunchQueue.{ QueuedInstanceInfo, QueuedInstanceInfoWithStatistics }
+import mesosphere.marathon.raml.{ App, Raml }
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state.AppDefinition
 import mesosphere.marathon.test.{ MarathonSpec, MarathonTestHelper, Mockito }
@@ -19,6 +18,13 @@ import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 
 class QueueResourceTest extends MarathonSpec with Matchers with Mockito with GivenWhenThen {
+
+  implicit val appDefReader: Reads[AppDefinition] = Reads { js =>
+    val ramlApp = js.as[App]
+    val appDef: AppDefinition = Raml.fromRaml(ramlApp)
+    // assume that any json we generate is canonical and valid
+    JsSuccess(appDef)
+  }
 
   test("return well formatted JSON") {
     //given
@@ -72,7 +78,7 @@ class QueueResourceTest extends MarathonSpec with Matchers with Mockito with Giv
       )
     )
     //when
-    val response = queueResource.index(auth.request, new java.util.HashSet())
+    val response = queueResource.index(auth.request, Set.empty)
 
     //then
     response.getStatus should be(200)
@@ -121,7 +127,7 @@ class QueueResourceTest extends MarathonSpec with Matchers with Mockito with Giv
     val req = auth.request
 
     When("the index is fetched")
-    val index = queueResource.index(req, new java.util.HashSet())
+    val index = queueResource.index(req, Set.empty)
     Then("we receive a NotAuthenticated response")
     index.getStatus should be(auth.NotAuthenticatedStatus)
 

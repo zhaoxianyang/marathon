@@ -1,8 +1,10 @@
-package mesosphere.marathon.integration.setup
+package mesosphere.marathon
+package integration.setup
 
-import mesosphere.marathon.api.v2.json.AppUpdate
 import mesosphere.marathon.core.event._
-import mesosphere.marathon.state.{ Group, RootGroup, Timestamp }
+import mesosphere.marathon.core.pod.PodDefinition
+import mesosphere.marathon.raml.{ App, Raml }
+import mesosphere.marathon.state.{ AppDefinition, Group, PathId, RootGroup, Timestamp }
 import mesosphere.marathon.upgrade.DeploymentPlan
 import play.api.libs.json._
 
@@ -11,6 +13,22 @@ import play.api.libs.json._
   */
 object V2TestFormats {
   import mesosphere.marathon.api.v2.json.Formats._
+
+  implicit lazy val GroupReads: Reads[Group] = Reads { js =>
+    JsSuccess(
+      Group(
+        id = (js \ "id").as[PathId],
+        apps = (js \ "apps").as[Seq[App]].map { ramlApp =>
+          val app: AppDefinition = Raml.fromRaml(ramlApp) // assume that we only generate canonical app json
+          app.id -> app
+        }.toMap[AppDefinition.AppKey, AppDefinition],
+        pods = Map.empty[PathId, PodDefinition], // we never read in pods
+        groups = (js \ "groups").as[Set[Group]],
+        dependencies = (js \ "dependencies").as[Set[PathId]],
+        version = (js \ "version").as[Timestamp]
+      )
+    )
+  }
 
   implicit lazy val DeploymentPlanReads: Reads[DeploymentPlan] = Reads { js =>
     JsSuccess(
@@ -46,38 +64,5 @@ object V2TestFormats {
 
   implicit lazy val eventSubscribersReads: Reads[EventSubscribers] = Reads { subscribersJson =>
     JsSuccess(EventSubscribers(urls = (subscribersJson \ "callbackUrls").asOpt[Set[String]].getOrElse(Set.empty)))
-  }
-
-  implicit lazy val v2AppUpdateWrite: Writes[AppUpdate] = Writes { update =>
-    Json.obj(
-      "id" -> update.id.map(_.toString),
-      "cmd" -> update.cmd,
-      "args" -> update.args,
-      "user" -> update.user,
-      "env" -> update.env,
-      "instances" -> update.instances,
-      "cpus" -> update.cpus,
-      "mem" -> update.mem,
-      "disk" -> update.disk,
-      "executor" -> update.executor,
-      "constraints" -> update.constraints,
-      "fetch" -> update.fetch,
-      "storeUrls" -> update.storeUrls,
-      "portDefinitions" -> update.portDefinitions,
-      "requirePorts" -> update.requirePorts,
-      "backoffSeconds" -> update.backoff.map(_.toSeconds),
-      "backoffFactor" -> update.backoffFactor,
-      "maxLaunchDelaySeconds" -> update.maxLaunchDelay.map(_.toSeconds),
-      "container" -> update.container,
-      "healthChecks" -> update.healthChecks.map(_.map(Json.toJson(_)(HealthCheckFormat))),
-      "readinessChecks" -> update.readinessChecks,
-      "taskKillGracePeriodSeconds" -> update.taskKillGracePeriod.map(_.toSeconds),
-      "dependencies" -> update.dependencies,
-      "upgradeStrategy" -> update.upgradeStrategy,
-      "labels" -> update.labels,
-      "version" -> update.version,
-      "acceptedResourceRoles" -> update.acceptedResourceRoles,
-      "ipAddress" -> update.ipAddress
-    )
   }
 }

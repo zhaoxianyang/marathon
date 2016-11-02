@@ -4,6 +4,7 @@ package integration
 import mesosphere.AkkaIntegrationFunTest
 import mesosphere.marathon.integration.facades.MarathonFacade._
 import mesosphere.marathon.integration.setup.EmbeddedMarathonTest
+import mesosphere.marathon.state.PathId._
 
 @IntegrationTest
 class TaskKillingIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMarathonTest {
@@ -20,7 +21,7 @@ class TaskKillingIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMar
     createResult.code should be (201) //Created
     extractDeploymentIds(createResult) should have size 1
     waitForDeployment(createResult)
-    waitForTasks(app.id, 1) //make sure, the app has really started
+    waitForTasks(app.id.toPath, 1) //make sure, the app has really started
 
     When("the task is killed")
     val killResult = marathon.killAllTasksAndScale(app.id)

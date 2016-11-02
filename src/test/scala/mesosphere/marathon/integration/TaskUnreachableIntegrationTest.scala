@@ -4,6 +4,7 @@ package integration
 import mesosphere.AkkaIntegrationFunTest
 import mesosphere.marathon.integration.facades.ITEnrichedTask
 import mesosphere.marathon.integration.setup._
+import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state.UnreachableStrategy
 
 import scala.concurrent.duration._
@@ -46,7 +47,7 @@ class TaskUnreachableIntegrationTest extends AkkaIntegrationFunTest with Embedde
     val strategy = UnreachableStrategy(10.seconds, 5.minutes)
     val app = appProxy(testBasePath / "app", "v1", instances = 1).copy(unreachableStrategy = strategy)
     waitForDeployment(marathon.createAppV2(app))
-    val task = waitForTasks(app.id, 1).head
+    val task = waitForTasks(app.id.toPath, 1).head
 
     When("the slave is partitioned")
     mesosCluster.agents(0).stop()

@@ -2,9 +2,9 @@ package mesosphere.marathon
 package state
 
 import mesosphere.marathon.core.instance.TestTaskBuilder
+import mesosphere.marathon.core.pod.{ BridgeNetwork, ContainerNetwork }
 import mesosphere.marathon.state.Container.PortMapping
 import mesosphere.marathon.test.MarathonTestHelper
-import org.apache.mesos.Protos
 import org.scalatest.{ FunSuiteLike, GivenWhenThen, Matchers, OptionValues }
 
 import scala.collection.immutable.Seq
@@ -16,9 +16,8 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
     Given("An app requesting IP-per-Task and specifying ports in the discovery info")
     val app = MarathonTestHelper.makeBasicApp()
       .withNoPortDefinitions()
-      .withIpAddress(
-        IpAddress(discoveryInfo = DiscoveryInfo(Seq(DiscoveryInfo.Port(80, "http", "tcp"))))
-      )
+      .withDockerNetworks(ContainerNetwork("whatever"))
+      .withPortMappings(Seq(Container.PortMapping(80, hostPort = Some(0), name = Some("http"), protocol = "tcp")))
 
     Given("A task with an IP address and a port")
     val task = TestTaskBuilder.Helper.minimalTask(app.id)
@@ -34,9 +33,9 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
       PortAssignment(
         portName = Some("http"),
         effectiveIpAddress = Some("192.168.0.1"),
-        effectivePort = 1,
+        effectivePort = 80,
         hostPort = Some(1),
-        containerPort = None)
+        containerPort = Some(80))
     ))
   }
 
@@ -44,9 +43,8 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
     Given("An app requesting IP-per-Task and specifying ports in the discovery info")
     val app = MarathonTestHelper.makeBasicApp()
       .withNoPortDefinitions()
-      .withIpAddress(
-        IpAddress(discoveryInfo = DiscoveryInfo(Seq(DiscoveryInfo.Port(80, "http", "tcp"))))
-      )
+      .withDockerNetworks(ContainerNetwork("whatever"))
+      .withPortMappings(Seq(Container.PortMapping(80, name = Some("http"), protocol = "tcp")))
 
     Given("A task with no IP address nor host ports")
     val task = TestTaskBuilder.Helper.minimalTask(app.id)
@@ -54,16 +52,21 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
       .withHostPorts(Seq.empty)
 
     Then("The port assignments are empty")
-    app.portAssignments(task) should be(empty)
+    app.portAssignments(task) should equal(Seq(
+      PortAssignment(
+        portName = Some("http"),
+        effectiveIpAddress = None,
+        effectivePort = 80,
+        hostPort = None,
+        containerPort = Some(80))
+    ))
   }
 
   test("portAssignments with IP-per-task without ports") {
     Given("An app requesting IP-per-Task and not specifying ports in the discovery info")
     val app = MarathonTestHelper.makeBasicApp()
       .withNoPortDefinitions()
-      .withIpAddress(
-        IpAddress(discoveryInfo = DiscoveryInfo(Seq.empty))
-      )
+      .withDockerNetworks(ContainerNetwork("whatever"))
 
     Given("A task with an IP address and no host ports")
     val task = TestTaskBuilder.Helper.minimalTask(app.id)
@@ -90,7 +93,7 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
     Given("An app without IP-per-task, using BRIDGE networking with one port mapping requesting a dynamic port")
     val app = MarathonTestHelper.makeBasicApp()
       .withNoPortDefinitions()
-      .withDockerNetwork(Protos.ContainerInfo.DockerInfo.Network.BRIDGE)
+      .withDockerNetworks(BridgeNetwork())
       .withPortMappings(Seq(
         PortMapping(containerPort = 80, hostPort = Some(0), servicePort = 0, protocol = "tcp",
           name = Some("http"))
@@ -115,10 +118,10 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
     Given("An app using bridge network with no port mappings nor ports")
     val app = MarathonTestHelper.makeBasicApp().copy(
       container = Some(Container.Docker(
-        image = "mesosphere/marathon",
-        network = Some(Protos.ContainerInfo.DockerInfo.Network.BRIDGE)
+        image = "mesosphere/marathon"
       )),
-      portDefinitions = Seq.empty
+      portDefinitions = Seq.empty,
+      networks = Seq(BridgeNetwork())
     )
 
     Given("A task with a port")
@@ -132,8 +135,7 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
     Given("An app using IP-per-task, USER networking and with a port mapping requesting no ports")
     val app = MarathonTestHelper.makeBasicApp()
       .withNoPortDefinitions()
-      .withIpAddress(IpAddress.empty)
-      .withDockerNetwork(Protos.ContainerInfo.DockerInfo.Network.USER)
+      .withDockerNetworks(ContainerNetwork("whatever"))
       .withPortMappings(Seq(
         PortMapping(containerPort = 80, hostPort = None, servicePort = 0, protocol = "tcp", name = Some("http"))
       ))
@@ -161,8 +163,7 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
     Given("An app using IP-per-task, USER networking and with a port mapping requesting one host port")
     val app = MarathonTestHelper.makeBasicApp()
       .withNoPortDefinitions()
-      .withIpAddress(IpAddress.empty)
-      .withDockerNetwork(Protos.ContainerInfo.DockerInfo.Network.USER)
+      .withDockerNetworks(ContainerNetwork("whatever"))
       .withPortMappings(Seq(
         PortMapping(containerPort = 80, hostPort = Some(0), servicePort = 0, protocol = "tcp",
           name = Some("http"))
@@ -191,8 +192,7 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
     Given("An app using IP-per-task, USER networking and a mix of port mappings")
     val app = MarathonTestHelper.makeBasicApp()
       .withNoPortDefinitions()
-      .withIpAddress(IpAddress.empty)
-      .withDockerNetwork(Protos.ContainerInfo.DockerInfo.Network.USER)
+      .withDockerNetworks(ContainerNetwork("whatever"))
       .withPortMappings(Seq(
         PortMapping(containerPort = 80, hostPort = None, servicePort = 0, protocol = "tcp", name = Some("http")),
         PortMapping(containerPort = 443, hostPort = Some(0), servicePort = 0, protocol = "tcp",
@@ -219,41 +219,6 @@ class AppDefinitionPortAssignmentsTest extends FunSuiteLike with GivenWhenThen w
         portName = Some("https"),
         effectiveIpAddress = Some("192.168.0.1"),
         effectivePort = 443,
-        containerPort = Some(443),
-        hostPort = Some(30000))
-    ))
-  }
-
-  test("portAssignments without IP-per-task, with Docker USER networking and a mix of port mappings") {
-    Given("An app not using IP-per-task, with Docker USER networking and a mix of port mappings")
-    val app = MarathonTestHelper.makeBasicApp()
-      .withNoPortDefinitions()
-      .withDockerNetwork(Protos.ContainerInfo.DockerInfo.Network.USER)
-      .withPortMappings(Seq(
-        PortMapping(containerPort = 80, hostPort = None, servicePort = 0, protocol = "tcp",
-          name = Some("http")),
-        PortMapping(containerPort = 443, hostPort = Some(0), servicePort = 0, protocol = "tcp",
-          name = Some("https"))
-      ))
-
-    Given("A task with a host port")
-    val task = TestTaskBuilder.Helper.minimalTask(app.id).withHostPorts(Seq(30000))
-
-    Then("The right port assignment is returned")
-    val portAssignments = app.portAssignments(task)
-    portAssignments should be(Seq(
-      // If there's no IP-per-task and no host port is required, fall back to the container port
-      PortAssignment(
-        portName = Some("http"),
-        effectiveIpAddress = Some(task.agentInfo.host),
-        effectivePort = 80,
-        containerPort = Some(80),
-        hostPort = None),
-      // If there's no IP-per-task and a host port is required, use that host port
-      PortAssignment(
-        portName = Some("https"),
-        effectiveIpAddress = Some(task.agentInfo.host),
-        effectivePort = 30000,
         containerPort = Some(443),
         hostPort = Some(30000))
     ))

@@ -23,7 +23,6 @@ import mesosphere.marathon.storage.repository.AppRepository
 import mesosphere.marathon.test.{ CaptureEvents, MarathonShutdownHookSupport, MarathonSpec, MarathonTestHelper }
 import mesosphere.util.Logging
 import org.apache.mesos.{ Protos => mesos }
-import org.rogach.scallop.ScallopConf
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{ Millis, Span }
 
@@ -59,10 +58,6 @@ class MarathonHealthCheckManagerTest
     )
     mat = ActorMaterializer()
     leadershipModule = AlwaysElectedLeadershipModule(shutdownHooks)
-
-    val config = new ScallopConf(Seq("--master", "foo")) with MarathonConf {
-      verify()
-    }
 
     val taskTrackerModule = MarathonTestHelper.createTaskTrackerModule(leadershipModule)
     taskTracker = taskTrackerModule.instanceTracker
@@ -230,13 +225,16 @@ class MarathonHealthCheckManagerTest
         .setHealthy(true)
         .build
     val healthChecks = List(0, 1, 2).map { i =>
-      (0 until i).map { j => MesosCommandHealthCheck(gracePeriod = (i * 3 + j).seconds, command = Command("true")) }.toSet
+      (0 until i).map { j =>
+        val check: HealthCheck = MesosCommandHealthCheck(gracePeriod = (i * 3 + j).seconds, command = Command("true"))
+        check
+      }.to[Set]
     }
     val versions = List(0L, 1L, 2L).map { Timestamp(_) }.toArray
     val instances = List(0, 1, 2).map { i =>
       TestInstanceBuilder.newBuilder(appId).addTaskStaged(version = Some(versions(i))).getInstance()
     }
-    def startTask(appId: PathId, instance: Instance, version: Timestamp, healthChecks: Set[_ <: HealthCheck]) = {
+    def startTask(appId: PathId, instance: Instance, version: Timestamp, healthChecks: Set[HealthCheck]) = {
       appRepository.store(AppDefinition(
         id = appId,
         versionInfo = VersionInfo.forNewConfig(version),
@@ -253,7 +251,7 @@ class MarathonHealthCheckManagerTest
     // one other task of another app
     val otherAppId = "other".toRootPath
     val otherInstance = TestInstanceBuilder.newBuilder(appId).addTaskStaged(version = Some(Timestamp.zero)).getInstance()
-    val otherHealthChecks = Set(MesosCommandHealthCheck(gracePeriod = 0.seconds, command = Command("true")))
+    val otherHealthChecks = Set[HealthCheck](MesosCommandHealthCheck(gracePeriod = 0.seconds, command = Command("true")))
     startTask(otherAppId, otherInstance, Timestamp(42), otherHealthChecks)
     hcManager.addAllFor(appRepository.get(otherAppId).futureValue.get, Seq.empty)
     assert(hcManager.list(otherAppId) == otherHealthChecks) // linter:ignore:UnlikelyEquality

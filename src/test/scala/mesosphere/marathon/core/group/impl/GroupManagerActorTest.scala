@@ -12,6 +12,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestActorRef
 import akka.util.Timeout
 import com.codahale.metrics.MetricRegistry
+import mesosphere.marathon.core.pod.{ BridgeNetwork, ContainerNetwork }
 import mesosphere.marathon.io.storage.StorageProvider
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state.PathId._
@@ -57,10 +58,8 @@ class GroupManagerActorTest extends Mockito with Matchers with MarathonSpec with
 
   test("Assign dynamic service ports specified in the container") {
     import Container.{ Docker, PortMapping }
-    import org.apache.mesos.Protos.ContainerInfo.DockerInfo.Network
     val container = Docker(
       image = "busybox",
-      network = Some(Network.BRIDGE),
       portMappings = Seq(
         PortMapping(containerPort = 8080, hostPort = Some(0), servicePort = 0, protocol = "tcp"),
         PortMapping(containerPort = 9000, hostPort = Some(10555), servicePort = 10555, protocol = "udp"),
@@ -68,7 +67,7 @@ class GroupManagerActorTest extends Mockito with Matchers with MarathonSpec with
         PortMapping(containerPort = 9002, hostPort = Some(0), servicePort = 0, protocol = "tcp")
       )
     )
-    val app = AppDefinition("/app1".toPath, portDefinitions = Seq(), container = Some(container))
+    val app = AppDefinition("/app1".toPath, portDefinitions = Seq(), container = Some(container), networks = Seq(BridgeNetwork()))
     val rootGroup = createRootGroup(Map(app.id -> app))
     val servicePortsRange = 10 to 14
     val updatedGroup = manager(servicePortsRange).assignDynamicServicePorts(createRootGroup(), rootGroup)
@@ -81,23 +80,21 @@ class GroupManagerActorTest extends Mockito with Matchers with MarathonSpec with
 
   test("Assign dynamic service ports specified in multiple containers") {
     import Container.{ Docker, PortMapping }
-    import org.apache.mesos.Protos.ContainerInfo.DockerInfo.Network
     val c1 = Some(Docker(
       image = "busybox",
-      network = Some(Network.USER),
       portMappings = Seq(
         PortMapping(containerPort = 8080)
       )
     ))
     val c2 = Some(Docker(
       image = "busybox",
-      network = Some(Network.USER),
       portMappings = Seq(
         PortMapping(containerPort = 8081)
       )
     ))
-    val app1 = AppDefinition("/app1".toPath, portDefinitions = Seq(), container = c1)
-    val app2 = AppDefinition("/app2".toPath, portDefinitions = Seq(), container = c2)
+    val virtualNetwork = Seq(ContainerNetwork(name = "whatever"))
+    val app1 = AppDefinition("/app1".toPath, portDefinitions = Seq(), container = c1, networks = virtualNetwork)
+    val app2 = AppDefinition("/app2".toPath, portDefinitions = Seq(), container = c2, networks = virtualNetwork)
     val rootGroup = createRootGroup(Map(
       app1.id -> app1,
       app2.id -> app2
@@ -111,24 +108,21 @@ class GroupManagerActorTest extends Mockito with Matchers with MarathonSpec with
 
   test("Assign dynamic service ports w/ both BRIDGE and USER containers") {
     import Container.{ Docker, PortMapping }
-    import org.apache.mesos.Protos.ContainerInfo.DockerInfo.Network
     val bridgeModeContainer = Some(Docker(
       image = "busybox",
-      network = Some(Network.BRIDGE),
       portMappings = Seq(
         PortMapping(containerPort = 8080, hostPort = Some(0))
       )
     ))
     val userModeContainer = Some(Docker(
       image = "busybox",
-      network = Some(Network.USER),
       portMappings = Seq(
         PortMapping(containerPort = 8081),
         PortMapping(containerPort = 8082, hostPort = Some(0))
       )
     ))
-    val bridgeModeApp = AppDefinition("/bridgemodeapp".toPath, container = bridgeModeContainer)
-    val userModeApp = AppDefinition("/usermodeapp".toPath, container = userModeContainer)
+    val bridgeModeApp = AppDefinition("/bridgemodeapp".toPath, container = bridgeModeContainer, networks = Seq(BridgeNetwork()))
+    val userModeApp = AppDefinition("/usermodeapp".toPath, container = userModeContainer, networks = Seq(ContainerNetwork("whatever")))
     val fromGroup = createRootGroup(Map(bridgeModeApp.id -> bridgeModeApp))
     val toGroup = createRootGroup(Map(
       bridgeModeApp.id -> bridgeModeApp,
@@ -149,15 +143,13 @@ class GroupManagerActorTest extends Mockito with Matchers with MarathonSpec with
 
   test("Assign a service port for an app using Docker USER networking with a default port mapping") {
     import Container.{ Docker, PortMapping }
-    import org.apache.mesos.Protos.ContainerInfo.DockerInfo.Network
     val c1 = Some(Docker(
       image = "busybox",
-      network = Some(Network.USER),
       portMappings = Seq(
         PortMapping()
       )
     ))
-    val app1 = AppDefinition("/app1".toPath, portDefinitions = Seq(), container = c1)
+    val app1 = AppDefinition("/app1".toPath, portDefinitions = Seq(), container = c1, networks = Seq(ContainerNetwork("whatever")))
     val rootGroup = createRootGroup(Map(app1.id -> app1))
     val servicePortsRange = 10 to 11
     val update = manager(servicePortsRange).assignDynamicServicePorts(createRootGroup(), rootGroup)
@@ -179,20 +171,18 @@ class GroupManagerActorTest extends Mockito with Matchers with MarathonSpec with
   // Regression test for #1365
   test("Export non-dynamic service ports specified in the container to the ports field") {
     import Container.{ Docker, PortMapping }
-    import org.apache.mesos.Protos.ContainerInfo.DockerInfo.Network
     val container = Docker(
       image = "busybox",
-      network = Some(Network.BRIDGE),
       portMappings = Seq(
         PortMapping(containerPort = 8080, hostPort = Some(0), servicePort = 80, protocol = "tcp"),
         PortMapping(containerPort = 9000, hostPort = Some(10555), servicePort = 81, protocol = "udp")
       )
     )
-    val app1 = AppDefinition("/app1".toPath, container = Some(container))
+    val app1 = AppDefinition("/app1".toPath, container = Some(container), networks = Seq(BridgeNetwork()))
     val rootGroup = createRootGroup(Map(app1.id -> app1))
     val update = manager(90 to 900).assignDynamicServicePorts(createRootGroup(), rootGroup)
     update.transitiveApps.filter(_.hasDynamicServicePorts) should be (empty)
-    update.transitiveApps.flatMap(_.portNumbers) should equal (Set(80, 81))
+    update.transitiveApps.flatMap(_.servicePorts) should equal (Set(80, 81))
   }
 
   test("Already taken ports will not be used") {

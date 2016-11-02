@@ -4,14 +4,11 @@ package integration
 import java.io.File
 
 import mesosphere.AkkaIntegrationFunTest
-import mesosphere.marathon.api.v2.json.AppUpdate
-import mesosphere.marathon.core.health.{ MarathonHttpHealthCheck, PortReference }
 import mesosphere.marathon.integration.setup._
-import mesosphere.marathon.state.{ PortDefinition, UpgradeStrategy }
+import mesosphere.marathon.raml.{ AppHealthCheck, AppUpdate, PortDefinition }
 import org.apache.commons.io.FileUtils
 import org.slf4j.LoggerFactory
 
-import scala.collection.immutable
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -41,14 +38,14 @@ class AppDeployWithLeaderAbdicationIntegrationTest extends AkkaIntegrationFunTes
 
     // ServiceMock will block the deployment (returning HTTP 503) until called continue()
     val plan = "phase(block1)"
-    val appv2 = marathon.updateApp(appId, AppUpdate(
+    marathon.updateApp(appId, AppUpdate(
       cmd = Some(s"""$serviceMockScript '$plan'"""),
-      portDefinitions = Some(immutable.Seq(PortDefinition(0, name = Some("http")))),
-      healthChecks = Some(Set(healthCheck)),
-      upgradeStrategy = Some(UpgradeStrategy(minimumHealthCapacity = 1.0))))
+      portDefinitions = Some(Seq(PortDefinition(0, name = Some("http")))),
+      healthChecks = Some(Seq(ramlHealthCheck)),
+      upgradeStrategy = Some(raml.UpgradeStrategy(minimumHealthCapacity = 1.0, maximumOverCapacity = 1.0))))
 
     And("new and updated task is started successfully")
-    val updated = waitForTasks(appId, 2, maxWait = 90.seconds) //make sure, the new task has really started
+    waitForTasks(appId, 2, maxWait = 90.seconds) //make sure, the new task has really started
 
     val updatedTask = updated.diff(started.value).head
     val updatedTaskIds: List[String] = updated.map(_.id).diff(startedTaskIds)
@@ -92,11 +89,12 @@ class AppDeployWithLeaderAbdicationIntegrationTest extends AkkaIntegrationFunTes
     infoString.contains(s"List(Map(actions -> List(Map(action -> RestartApplication, app -> $appId)))))")
   }
 
-  private lazy val healthCheck: MarathonHttpHealthCheck = MarathonHttpHealthCheck(
+  private lazy val ramlHealthCheck: AppHealthCheck = AppHealthCheck(
     path = Some("/v1/plan"),
-    portIndex = Some(PortReference(0)),
-    interval = 2.seconds,
-    timeout = 1.second)
+    portIndex = Some(0),
+    intervalSeconds = 2,
+    timeoutSeconds = 1
+  )
 
   /**
     * Create a shell script that can start a service mock

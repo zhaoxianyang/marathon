@@ -3,12 +3,14 @@ package api.validation
 
 import com.wix.accord.validate
 import mesosphere.marathon.Protos.Constraint
+import mesosphere.marathon.api.v2.AppNormalization
 import mesosphere.marathon.api.v2.Validation._
-import mesosphere.marathon.api.v2.json.Formats
+import mesosphere.marathon.api.v2.validation.AppValidation
 import mesosphere.marathon.core.health.{ MarathonHttpHealthCheck, MesosCommandHealthCheck }
 import mesosphere.marathon.core.plugin.{ PluginDefinitions, PluginManager }
+import mesosphere.marathon.core.pod.HostNetwork
 import mesosphere.marathon.core.readiness.ReadinessCheck
-import mesosphere.marathon.raml.Resources
+import mesosphere.marathon.raml.{ App, Raml, Resources }
 import mesosphere.marathon.state._
 import mesosphere.marathon.test.{ MarathonSpec, MarathonTestHelper }
 import org.apache.mesos.{ Protos => mesos }
@@ -20,6 +22,7 @@ import scala.reflect.ClassTag
 
 class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen {
 
+  implicit lazy val validApp = AppValidation.validateCanonicalAppAPI(Set())
   implicit lazy val validAppDefinition = AppDefinition.validAppDefinition(Set())(PluginManager.None)
   implicit lazy val validContainer = Container.validContainer(Set())
 
@@ -655,9 +658,9 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
 
     val app1 = AppDefinition(
       id = PathId("/test"),
+      networks = Seq(HostNetwork),
       container = Some(Container.Docker(
-        image = "group/image",
-        network = Some(mesos.ContainerInfo.DockerInfo.Network.HOST)
+        image = "group/image"
       )),
       portDefinitions = List.empty,
       healthChecks = Set(
@@ -674,21 +677,17 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
   }
 
   test("cassandraWithoutResidency") {
-    import Formats._
-
     val f = new Fixture
-    val app = Json.parse(f.cassandraWithoutResidency).as[AppDefinition]
-    val result = validAppDefinition(app)
+    val app = Json.parse(f.cassandraWithoutResidency).as[App]
+    val result = validAppDefinition(Raml.fromRaml(AppNormalization.apply(validateOrThrow(AppNormalization.forDeprecatedFields(app)), AppNormalization.Config(None))))
     result.isSuccess shouldBe true
   }
 
   test("cassandraWithoutResidencyWithUpgradeStrategy") {
-    import Formats._
-
     val f = new Fixture
-    val base = Json.parse(f.cassandraWithoutResidency).as[AppDefinition]
-    val app = base.copy(upgradeStrategy = UpgradeStrategy(0, 0))
-    val result = validAppDefinition(app)
+    val base = Json.parse(f.cassandraWithoutResidency).as[App]
+    val app = base.copy(upgradeStrategy = Some(raml.UpgradeStrategy(0, 0)))
+    val result = validAppDefinition(Raml.fromRaml(AppNormalization.apply(validateOrThrow(AppNormalization.forDeprecatedFields(app)), AppNormalization.Config(None))))
     result.isSuccess shouldBe true
   }
 

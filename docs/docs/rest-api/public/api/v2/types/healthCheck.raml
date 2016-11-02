@@ -69,7 +69,7 @@ types:
     type: string
     enum: [HTTP, HTTPS, TCP, COMMAND, MESOS_TCP, MESOS_HTTP, MESOS_HTTPS]
     description: |
-      Protocol of the requests to be performed. One of HTTP, HTTPS, TCP or COMMAND.
+      Protocol of the requests to be performed.
   CommandCheck:
     properties:
       command:
@@ -78,6 +78,7 @@ types:
           Command line executed by the default shell.
           This process has to return with a zero exit code to indicate the process is healthy.
           Return codes other than null signal, the task is unhealthy.
+        pattern: /[^ \t\r\n\v\f]/
   AppHealthCheck:
     type: object
     properties:

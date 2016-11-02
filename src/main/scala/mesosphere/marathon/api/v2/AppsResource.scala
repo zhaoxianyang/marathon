@@ -10,7 +10,8 @@ import javax.ws.rs.core.{ Context, MediaType, Response }
 import akka.event.EventStream
 import com.codahale.metrics.annotation.Timed
 import mesosphere.marathon.api.v2.Validation._
-import mesosphere.marathon.api.v2.json.AppUpdate
+import mesosphere.marathon.api.v2.validation.AppValidation
+import mesosphere.marathon.api.v2.json.AppUpdateHelper._
 import mesosphere.marathon.api.v2.json.Formats._
 import mesosphere.marathon.api.{ AuthResource, MarathonMediaType, RestResource }
 import mesosphere.marathon.core.appinfo.{ AppInfo, AppInfoService, AppSelector, Selector, TaskCounts }
@@ -19,6 +20,7 @@ import mesosphere.marathon.core.event.ApiPostEvent
 import mesosphere.marathon.core.group.GroupManager
 import mesosphere.marathon.core.plugin.PluginManager
 import mesosphere.marathon.plugin.auth._
+import mesosphere.marathon.raml.Raml
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state._
 import mesosphere.marathon.stream._
@@ -43,7 +45,17 @@ class AppsResource @Inject() (
 
   private[this] val ListApps = """^((?:.+/)|)\*$""".r
   implicit lazy val appDefinitionValidator = AppDefinition.validAppDefinition(config.availableFeatures)(pluginManager)
-  implicit lazy val appUpdateValidator = AppUpdate.appUpdateValidator(config.availableFeatures)
+  implicit lazy val validateCanonicalAppUpdateAPI = AppValidation.validateCanonicalAppUpdateAPI(config.availableFeatures)
+
+  val normalizationConfig = AppNormalization.Config(config.defaultNetworkName.get)
+  val preprocessApp: (raml.App => raml.App) = AppsResource.preprocessor(config.availableFeatures, normalizationConfig)
+
+  def preprocess(app: raml.AppUpdate): raml.AppUpdate = {
+    validateOrThrow(app)(AppValidation.validateOldAppUpdateAPI)
+    val migrated = AppNormalization.forDeprecatedFields(app)
+    validateOrThrow(app)(validateCanonicalAppUpdateAPI)
+    AppNormalization(migrated, normalizationConfig)
+  }
 
   @GET
   @Timed
@@ -67,39 +79,35 @@ class AppsResource @Inject() (
     body: Array[Byte],
     @DefaultValue("false")@QueryParam("force") force: Boolean,
     @Context req: HttpServletRequest): Response = authenticated(req) { implicit identity =>
-    withValid(Json.parse(body).as[AppDefinition].withCanonizedIds()) { appDef =>
-      val now = clock.now()
-      val app = appDef.copy(
-        ipAddress = appDef.ipAddress.map { ipAddress =>
-          config.defaultNetworkName.get.collect {
-            case (defaultName: String) if defaultName.nonEmpty && ipAddress.networkName.isEmpty =>
-              ipAddress.copy(networkName = Some(defaultName))
-          }.getOrElse(ipAddress)
-        },
-        versionInfo = VersionInfo.OnlyVersion(now)
-      )
 
-      checkAuthorization(CreateRunSpec, app)
+    assumeValid {
+      val rawApp = Raml.fromRaml(preprocessApp(Json.parse(body).as[raml.App]))
+      withValid(rawApp.withCanonizedIds()) { appDef =>
+        val now = clock.now()
+        val app = appDef.copy(versionInfo = VersionInfo.OnlyVersion(now))
 
-      def createOrThrow(opt: Option[AppDefinition]) = opt
-        .map(_ => throw ConflictingChangeException(s"An app with id [${app.id}] already exists."))
-        .getOrElse(app)
+        checkAuthorization(CreateRunSpec, app)
 
-      val plan = result(groupManager.updateApp(app.id, createOrThrow, app.version, force))
+        def createOrThrow(opt: Option[AppDefinition]) = opt
+          .map(_ => throw ConflictingChangeException(s"An app with id [${app.id}] already exists."))
+          .getOrElse(app)
 
-      val appWithDeployments = AppInfo(
-        app,
-        maybeCounts = Some(TaskCounts.zero),
-        maybeTasks = Some(Seq.empty),
-        maybeDeployments = Some(Seq(Identifiable(plan.id)))
-      )
+        val plan = result(groupManager.updateApp(app.id, createOrThrow, app.version, force))
 
-      maybePostEvent(req, appWithDeployments.app)
-      Response
-        .created(new URI(app.id.toString))
-        .header(RestResource.DeploymentHeader, plan.id)
-        .entity(jsonString(appWithDeployments))
-        .build()
+        val appWithDeployments = AppInfo(
+          app,
+          maybeCounts = Some(TaskCounts.zero),
+          maybeTasks = Some(Seq.empty),
+          maybeDeployments = Some(Seq(Identifiable(plan.id)))
+        )
+
+        maybePostEvent(req, appWithDeployments.app)
+        Response
+          .created(new URI(app.id.toString))
+          .header(RestResource.DeploymentHeader, plan.id)
+          .entity(jsonString(appWithDeployments))
+          .build()
+      }
     }
   }
 
@@ -152,16 +160,19 @@ class AppsResource @Inject() (
     val appId = id.toRootPath
     val now = clock.now()
 
-    withValid(Json.parse(body).as[AppUpdate].copy(id = Some(appId))) { appUpdate =>
-      val plan = result(groupManager.updateApp(appId, updateOrCreate(appId, _, appUpdate), now, force))
+    assumeValid {
+      val appUpdate = preprocess(Json.parse(body).as[raml.AppUpdate])
+      withValid(appUpdate.copy(id = Some(appId.toString))) { appUpdate =>
+        val plan = result(groupManager.updateApp(appId, updateOrCreate(appId, _, appUpdate), now, force))
 
-      val response = plan.original.app(appId)
-        .map(_ => Response.ok())
-        .getOrElse(Response.created(new URI(appId.toString)))
-      plan.target.app(appId).foreach { appDef =>
-        maybePostEvent(req, appDef)
+        val response = plan.original.app(appId)
+          .map(_ => Response.ok())
+          .getOrElse(Response.created(new URI(appId.toString)))
+        plan.target.app(appId).foreach { appDef =>
+          maybePostEvent(req, appDef)
+        }
+        deploymentResult(plan, response)
       }
-      deploymentResult(plan, response)
     }
   }
 
@@ -171,17 +182,21 @@ class AppsResource @Inject() (
     @DefaultValue("false")@QueryParam("force") force: Boolean,
     body: Array[Byte],
     @Context req: HttpServletRequest): Response = authenticated(req) { implicit identity =>
-    withValid(Json.parse(body).as[Seq[AppUpdate]].map(_.withCanonizedIds())) { updates =>
-      val version = clock.now()
 
-      def updateGroup(rootGroup: RootGroup): RootGroup = updates.foldLeft(rootGroup) { (group, update) =>
-        update.id match {
-          case Some(id) => group.updateApp(id, updateOrCreate(id, _, update), version)
-          case None => group
+    assumeValid {
+      val appUpdates = Json.parse(body).as[Seq[raml.AppUpdate]].map(upd => withCanonizedIds(preprocess(upd)))
+      withValid(appUpdates) { updates =>
+        val version = clock.now()
+
+        def updateGroup(rootGroup: RootGroup): RootGroup = updates.foldLeft(rootGroup) { (group, update) =>
+          update.id.map(PathId(_)) match {
+            case Some(id) => group.updateApp(id, updateOrCreate(id, _, update), version)
+            case None => group
+          }
         }
-      }
 
-      deploymentResult(result(groupManager.updateRoot(updateGroup, version, force)))
+        deploymentResult(result(groupManager.updateRoot(updateGroup, version, force)))
+      }
     }
   }
 
@@ -235,14 +250,14 @@ class AppsResource @Inject() (
   private def updateOrCreate(
     appId: PathId,
     existing: Option[AppDefinition],
-    appUpdate: AppUpdate)(implicit identity: Identity): AppDefinition = {
+    appUpdate: raml.AppUpdate)(implicit identity: Identity): AppDefinition = {
     def createApp(): AppDefinition = {
-      val app = validateOrThrow(appUpdate.empty(appId))
+      val app = validateOrThrow(withoutPriorAppDefinition(appUpdate, appId))
       checkAuthorization(CreateRunSpec, app)
     }
 
     def updateApp(current: AppDefinition): AppDefinition = {
-      val app = validateOrThrow(appUpdate(current))
+      val app = validateOrThrow(Raml.fromRaml((appUpdate, current)))
       checkAuthorization(UpdateRunSpec, app)
     }
 
@@ -254,7 +269,7 @@ class AppsResource @Inject() (
     }
 
     def updateOrRollback(current: AppDefinition): AppDefinition = appUpdate.version
-      .map(rollback(current, _))
+      .map(v => rollback(current, Timestamp(v)))
       .getOrElse(updateApp(current))
 
     existing match {
@@ -285,6 +300,13 @@ class AppsResource @Inject() (
 }
 
 object AppsResource {
+
+  def preprocessor(enabledFeatures: Set[String], config: AppNormalization.Config): (raml.App => raml.App) = { app =>
+    validateOrThrow(app)(AppValidation.validateOldAppAPI)
+    val migrated = AppNormalization.forDeprecatedFields(app)
+    validateOrThrow(migrated)(AppValidation.validateCanonicalAppAPI(enabledFeatures))
+    AppNormalization(migrated, config)
+  }
 
   def authzSelector(implicit authz: Authorizer, identity: Identity): AppSelector = Selector[AppDefinition] { app =>
     authz.isAuthorized(identity, ViewRunSpec, app)

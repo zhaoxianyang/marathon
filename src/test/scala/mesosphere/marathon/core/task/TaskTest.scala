@@ -3,11 +3,12 @@ package core.task
 
 import mesosphere.marathon.core.base.ConstantClock
 import mesosphere.marathon.core.instance.{ Instance, TestTaskBuilder }
+import mesosphere.marathon.core.pod.{ ContainerNetwork, HostNetwork }
 import mesosphere.marathon.core.task.Task.LocalVolumeId
 import mesosphere.marathon.core.task.bus.MesosTaskStatusTestHelper
 import mesosphere.marathon.core.task.update.{ TaskUpdateEffect, TaskUpdateOperation }
 import mesosphere.marathon.core.condition.Condition
-import mesosphere.marathon.state.{ AppDefinition, IpAddress, PathId }
+import mesosphere.marathon.state.{ AppDefinition, PathId }
 import mesosphere.marathon.stream._
 import mesosphere.marathon.test.{ MarathonTestHelper, Mockito }
 import org.apache.mesos.{ Protos => MesosProtos }
@@ -22,11 +23,13 @@ class TaskTest extends FunSuite with Mockito with GivenWhenThen with Matchers {
 
     val clock = ConstantClock()
 
-    val appWithoutIpAddress = AppDefinition(id = PathId("/foo/bar"), ipAddress = None)
+    val appWithoutIpAddress = AppDefinition(id = PathId("/foo/bar"), networks = Seq(HostNetwork))
+    val appVirtualNetworks = Seq(ContainerNetwork("whatever"))
     val appWithIpAddress = AppDefinition(
       id = PathId("/foo/bar"),
       portDefinitions = Seq.empty,
-      ipAddress = Some(IpAddress()))
+      networks = appVirtualNetworks
+    )
 
     val networkWithoutIp = MesosProtos.NetworkInfo.newBuilder.build()
 

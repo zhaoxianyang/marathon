@@ -37,7 +37,7 @@ types:
       value:
         type: string
         description: value of this parameter
-  DockerPortMapping:
+  ContainerPortMapping:
     type: object
     properties:
       containerPort:
@@ -70,7 +70,7 @@ types:
           This can be used to add metadata to be interpreted by external
           applications such as firewalls.
       name?:
-        type: string
+        type: strings.Name
         description:
           Name of the service hosted on this port.
           If provided, it must be unique over all port mappings.
@@ -108,14 +108,20 @@ types:
         type: string
         minLength: 1
         description: The name of the docker image to use
-      network?: DockerNetwork
+      network?:
+        type: DockerNetwork
+        description: Deprecated in favor of App.networks
       parameters?:
         type: DockerParameter[]
         description: |
           Allowing arbitrary parameters to be passed to docker CLI.
           Note that anything passed to this field is not guaranteed to be
           supported moving forward, as we might move away from the docker CLI.
-      portMappings?: DockerPortMapping[]
+      portMappings?:
+        type: array
+        items: ContainerPortMapping
+        description: |
+          Deprecated in favor of Container.portMappings
       privileged?:
         type: boolean
         description: Run this docker image in privileged mode
@@ -149,3 +155,4 @@ types:
       docker?: DockerContainer
       appc?: AppCContainer
       volumes?: volumes.AppVolume[]
+      portMappings?: ContainerPortMapping[]

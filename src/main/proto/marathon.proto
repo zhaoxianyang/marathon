@@ -71,6 +71,7 @@ message ReadinessCheckDefinition {
   optional bool preserveLastResponse = 8;
 }
 
+// deprecated, left here only to support migrations
 message IpAddress {
   repeated string groups = 1;
   repeated mesos.Label labels = 2;
@@ -78,8 +79,22 @@ message IpAddress {
   optional string networkName = 4;
 }
 
+// deprecated, left here only to support migrations
 message DiscoveryInfo {
   repeated mesos.Port ports = 1;
+}
+
+message NetworkDefinition {
+  enum Mode {
+    UNKNOWN = 0; // so that we can distinguish between set/unset values
+    HOST = 1;
+    CONTAINER = 2;
+    BRIDGE = 3;
+  }
+
+  optional Mode mode = 1;
+  optional string name = 2; // for CONTAINER mode only
+  repeated mesos.Label labels = 3; // for CONTAINER, BRIDGE modes only
 }
 
 message ServiceDefinition {
@@ -107,13 +122,14 @@ message ServiceDefinition {
   optional ResourceRoles acceptedResourceRoles = 22;
   optional int64 last_scaling_at = 23;
   optional int64 last_config_change_at = 24;
-  optional IpAddress ipAddress = 25;
+  optional IpAddress ipAddress = 25; // deprecated since 1.4
   optional ResidencyDefinition residency = 26;
   repeated mesos.Port portDefinitions = 27;
   repeated ReadinessCheckDefinition readinessCheckDefinition = 28;
   repeated Secret secrets = 29;
   repeated EnvVarReference envVarReferences = 30;
   optional int64 taskKillGracePeriod = 31; // stored as Millis
+  repeated NetworkDefinition networks = 32; // supersedes IpAddress
 }
 
 // we serialize PodDefinition and Instances as json, only required for legacy content
@@ -207,7 +223,8 @@ message ExtendedContainerInfo {
 
     optional mesos.ContainerInfo.DockerInfo.Network network = 2 [default = HOST];
 
-    message PortMapping {
+    // deprecated in favor of ExtendedContainerInfo.PortMapping,since 1.4
+    message DockerPortMapping {
       optional uint32 host_port = 1;
       required uint32 container_port = 2;
       optional string protocol = 3;
@@ -216,7 +233,8 @@ message ExtendedContainerInfo {
       optional uint32 service_port = 100 [default = 0];
     }
 
-    repeated PortMapping port_mappings = 3;
+    // deprecated in favor of ExtendedContainerInfo.port_mappings, since 1.4
+    repeated DockerPortMapping port_mappings = 3;
 
     optional bool privileged = 4 [default = false];
 
@@ -271,8 +289,18 @@ message ExtendedContainerInfo {
     optional bool force_pull_image = 4;
   }
 
+  message PortMapping {
+    optional uint32 host_port = 1;
+    required uint32 container_port = 2;
+    optional string protocol = 3;
+    optional string name = 4;
+    repeated mesos.Label labels = 5;
+    optional uint32 service_port = 100 [default = 0];
+  }
+
   required mesos.ContainerInfo.Type type = 1;
   repeated Volume volumes = 2;
+  repeated PortMapping port_mappings = 6; // since 1.4
 
   optional DockerInfo docker = 3;
   optional MesosDockerInfo mesosDocker = 4;

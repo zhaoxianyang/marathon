@@ -33,7 +33,9 @@ types:
           When a task using persistent local volumes cannot be restarted on the
           agent it's been pinned to, Marathon will try to launch this task on
           another node after this timeout. Defaults to 3600 (one hour).",
-      taskLostBehavior: strings.TaskLostBehavior
+      taskLostBehavior:
+        type: strings.TaskLostBehavior
+        default: WAIT_FOREVER
   UpgradeStrategy:
     type: object
     description: |
@@ -71,6 +73,7 @@ types:
         (pragma.forceOptional):
         type: array
         items: string
+        uniqueItems: true
         example: [public-facing]
         description: |
           A list of resource roles.
@@ -132,7 +135,9 @@ types:
           `/bin/sh -c ${app.cmd}`.
           Either `cmd` or `args` must be supplied.
           It is invalid to supply both `cmd` and `args` in the same app.
-      constraints?: constraints.AppConstraint[]
+      constraints?:
+        type: array
+        items: constraints.AppConstraint
       container?: appContainer.Container
       cpus?:
         type: number
@@ -142,7 +147,9 @@ types:
           The number of CPU shares this application needs per instance. This number does not have to be integer, but can be a fraction.",
         minimum: 0.001
       dependencies?:
-        type: strings.PathId[]
+        type: array
+        items: strings.PathId
+        uniqueItems: true
         description: |
           A list of services upon which this application depends
           An order is derived from the dependencies for performing start/stop and
@@ -159,7 +166,7 @@ types:
       env?: env.EnvVars
       executor?:
         type: string
-        pattern: ^(|\/\/cmd|\/?[^\/]+(\/[^\/]+)*)$
+        pattern: ^(//cmd)|(/?[^/]+(/[^/]+)*)|$
         default: ""
         description: |
           The executor to use to launch this application.
@@ -206,9 +213,15 @@ types:
         default: 0
         description: |
           The amount of GPU cores that is needed for the application per instance.
-      ipAddress?: network.IpAddress
+      ipAddress?:
+        type: network.IpAddress
+        description: deprecated in favor of App.networks
+      networks?:
+        type: array
+        items: network.Network
       ports?:
         type: array
+        (pragma.forceOptional):
         items: number.EphemeralPort
         description: |
           An array of required port resources on the agent host.
@@ -219,6 +232,7 @@ types:
           balancing definitions.
       portDefinitions?:
         type: network.PortDefinition[]
+        (pragma.forceOptional):
         description: |
           An array of required port resources on the agent host.
           The number of items in the array determines how many dynamic ports are
@@ -257,9 +271,11 @@ types:
       upgradeStrategy?: UpgradeStrategy
       uris?:
         type: array
+        (pragma.forceOptional):
         items:
           type: strings.Uri
         description: |
+          Deprecated in favor of fetch.
           URIs defined here are resolved, before the application gets started.
           If the application has external dependencies, they should be defined here.
       user?:

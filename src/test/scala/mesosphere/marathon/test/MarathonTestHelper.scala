@@ -17,6 +17,7 @@ import mesosphere.marathon.core.instance.update.InstanceChangeHandler
 import mesosphere.marathon.core.instance.Instance
 import mesosphere.marathon.core.launcher.impl.{ ReservationLabels, TaskLabels }
 import mesosphere.marathon.core.leadership.LeadershipModule
+import mesosphere.marathon.core.pod.Network
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.core.task.tracker.{ InstanceTracker, InstanceTrackerModule }
 import mesosphere.marathon.metrics.Metrics
@@ -121,7 +122,7 @@ object MarathonTestHelper {
       .addResources(memResource)
       .addResources(diskResource)
 
-    portsResource.foreach(offerBuilder.addResources(_))
+    portsResource.foreach(offerBuilder.addResources)
 
     offerBuilder
   }
@@ -287,7 +288,8 @@ object MarathonTestHelper {
   def makeBasicApp() = AppDefinition(
     id = "/test-app".toPath,
     resources = Resources(cpus = 1.0, mem = 64.0, disk = 1.0),
-    executor = "//cmd"
+    executor = "//cmd",
+    portDefinitions = Seq(PortDefinition(0))
   )
 
   lazy val appSchema = {
@@ -305,6 +307,7 @@ object MarathonTestHelper {
     validateJsonSchemaForString(appStr, valid)
   }
 
+  // TODO(jdef) re-think validating against this schema; we should be validating against RAML instead
   def validateJsonSchemaForString(appStr: String, valid: Boolean): Unit = {
     val appJson = JsonLoader.fromString(appStr)
     val validationResult: ProcessingReport = appSchema.validate(appJson)
@@ -420,15 +423,13 @@ object MarathonTestHelper {
 
       def withNoPortDefinitions(): AppDefinition = app.withPortDefinitions(Seq.empty)
 
-      def withIpAddress(ipAddress: IpAddress): AppDefinition = app.copy(ipAddress = Some(ipAddress))
-
-      def withDockerNetwork(network: Mesos.ContainerInfo.DockerInfo.Network): AppDefinition = {
+      def withDockerNetworks(networks: Network*): AppDefinition = {
         val docker = app.container.getOrElse(Container.Mesos()) match {
           case docker: Docker => docker
           case _ => Docker(image = "busybox")
         }
 
-        app.copy(container = Some(docker.copy(network = Some(network))))
+        app.copy(container = Some(docker), networks = networks.to[Seq])
       }
 
       def withPortMappings(newPortMappings: Seq[PortMapping]): AppDefinition = {

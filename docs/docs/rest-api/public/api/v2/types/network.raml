@@ -42,7 +42,7 @@ types:
 
   NetworkMode:
     type: string
-    enum: [container, host]
+    enum: [container, "container/bridge", host]
   Network:
     type: object
     properties:
@@ -63,17 +63,20 @@ types:
     type: object
     description: Port
     properties:
-      number:
+      number?:
         type: integer
         format: int32
         minimum: 0
         maximum: 65535
         description: The port number
+        default: 0
       name:
         type: string
         description: Name of the port
         pattern: ^[a-z][a-z0-9-]*$
-      protocol: strings.NetworkProtocol
+      protocol?:
+        type: strings.NetworkProtocol
+        default: tcp
   IpDiscovery:
     type: object
     description: Information useful for service discovery
@@ -89,8 +92,8 @@ types:
       will request a per-task IP from Mesos.
       A separate ports/portMappings configuration is then disallowed.
     properties:
-      discovery: IpDiscovery
-      groups:
+      discovery?: IpDiscovery
+      groups?:
         type: array
         description: |
           Array of network groups.
@@ -98,7 +101,8 @@ types:
           The idea is that containers can only reach containers with which they
           share at least one network group.
         items: string
-      labels: label.KVLabels
+        uniqueItems: true
+      labels?: label.KVLabels
       networkName?:
         type: string
         description: |
@@ -121,11 +125,10 @@ types:
           unique service port will be assigned by Marathon.
       labels?: label.KVLabels
       name?:
-        type: string
+        type: strings.Name
         description: |
           Name of the service hosted on this port.
           If provided, it must be unique over all port definitions.
-        pattern: ^[a-z][a-z0-90]*$
       protocol?:
         type: strings.NetworkProtocol
         default: tcp

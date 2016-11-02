@@ -2,10 +2,10 @@ package mesosphere.marathon
 package integration
 
 import mesosphere.AkkaIntegrationFunTest
-import mesosphere.marathon.Protos.Constraint.Operator
-import mesosphere.marathon.api.v2.json.AppUpdate
 import mesosphere.marathon.integration.facades.ITEnrichedTask
 import mesosphere.marathon.integration.setup._
+import mesosphere.marathon.raml.AppUpdate
+import mesosphere.marathon.state.PathId._
 
 @IntegrationTest
 @UnstableTest
@@ -27,15 +27,16 @@ class TaskLostIntegrationWithoutGCTest extends AkkaIntegrationFunTest with Embed
     val appId = testBasePath / "app"
     val app = appProxy(appId, "v1", instances = 2, healthCheck = None).copy(
       cmd = Some("sleep 1000"),
-      constraints = Set(
+      constraints = Seq(
         // make sure each agent runs one task so that no task is launched after one agent goes down
-        Protos.Constraint.newBuilder().setField("hostname").setOperator(Operator.UNIQUE).build())
+        Seq("hostname", "UNIQUE")
+      )
     )
     val create = marathon.createAppV2(app)
 
     When("the deployment is finished")
     waitForDeployment(create)
-    val tasks0 = waitForTasks(app.id, 2)
+    val tasks0 = waitForTasks(app.id.toPath, 2)
 
     Then("there are 2 running tasks on 2 agents")
     tasks0 should have size 2
@@ -48,7 +49,7 @@ class TaskLostIntegrationWithoutGCTest extends AkkaIntegrationFunTest with Embed
     waitForEventMatching("Task is declared unreachable") { matchEvent("TASK_UNREACHABLE", task) }
 
     And("The task is NOT removed from the task list")
-    val tasks1 = waitForTasks(app.id, 2)
+    val tasks1 = waitForTasks(app.id.toPath, 2)
     tasks1 should have size 2
     tasks1.exists(_.state == "TASK_UNREACHABLE") shouldBe true
 

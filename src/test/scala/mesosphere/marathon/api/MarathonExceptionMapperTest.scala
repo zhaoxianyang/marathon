@@ -1,12 +1,12 @@
-package mesosphere.marathon.api
+package mesosphere.marathon
+package api
 
 import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.JsonMappingException
-import mesosphere.marathon.ValidationFailedException
 import mesosphere.marathon.api.v2.Validation._
-import mesosphere.marathon.api.v2.json.Formats._
 import mesosphere.marathon.core.plugin.PluginManager
 import mesosphere.marathon.state.{ AppDefinition, PathId }
+import mesosphere.marathon.raml.App
 import mesosphere.marathon.test.MarathonSpec
 import org.scalatest.{ GivenWhenThen, Matchers }
 import play.api.libs.json.{ JsObject, JsResultException, Json }
@@ -16,7 +16,7 @@ class MarathonExceptionMapperTest extends MarathonSpec with GivenWhenThen with M
 
   test("Render js result exception correctly") {
     Given("A JsResultException, from an invalid json to object Reads")
-    val ex = intercept[JsResultException] { Json.parse("""{"id":123}""").as[AppDefinition] }
+    val ex = intercept[JsResultException] { Json.parse("""{"id":123}""").as[App] }
     val mapper = new MarathonExceptionMapper()
 
     When("The mapper creates a response from this exception")
@@ -30,7 +30,7 @@ class MarathonExceptionMapperTest extends MarathonSpec with GivenWhenThen with M
     val details = (entity \ "details").as[Seq[JsObject]]
     details should have size 1
     val firstDetail = details.head
-    (firstDetail \ "path").as[String] should be("/id")
+    (firstDetail \ "path").as[String] should be("")
     val errors = (firstDetail \ "errors").as[Seq[String]]
     errors should have size 1
     errors.head should be("error.expected.jsstring")
@@ -38,7 +38,7 @@ class MarathonExceptionMapperTest extends MarathonSpec with GivenWhenThen with M
 
   test("Render json parse exception correctly") {
     Given("A JsonParseException, from an invalid json to object Reads")
-    val ex = intercept[JsonParseException] { Json.parse("""{"id":"/test"""").as[AppDefinition] }
+    val ex = intercept[JsonParseException] { Json.parse("""{"id":"/test"""").as[App] }
     val mapper = new MarathonExceptionMapper()
 
     When("The mapper creates a response from this exception")
@@ -54,7 +54,7 @@ class MarathonExceptionMapperTest extends MarathonSpec with GivenWhenThen with M
 
   test("Render json mapping exception correctly") {
     Given("A JsonMappingException, from an invalid json to object Reads")
-    val ex = intercept[JsonMappingException] { Json.parse("").as[AppDefinition] }
+    val ex = intercept[JsonMappingException] { Json.parse("").as[App] }
     val mapper = new MarathonExceptionMapper()
 
     When("The mapper creates a response from this exception")

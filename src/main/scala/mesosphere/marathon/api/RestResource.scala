@@ -3,13 +3,13 @@ package mesosphere.marathon.api
 import java.net.URI
 import javax.ws.rs.core.Response
 import javax.ws.rs.core.Response.{ ResponseBuilder, Status }
+
 import com.wix.accord._
-import mesosphere.marathon.MarathonConf
+import mesosphere.marathon.{ MarathonConf, ValidationFailedException }
 import mesosphere.marathon.api.v2.Validation._
 import mesosphere.marathon.api.v2.json.Formats._
 import mesosphere.marathon.state.{ PathId, Timestamp }
 import mesosphere.marathon.upgrade.DeploymentPlan
-
 import play.api.libs.json.Json.JsValueWrapper
 import play.api.libs.json.{ Json, Writes }
 
@@ -74,6 +74,15 @@ trait RestResource {
       case Success => fn(t)
     }
   }
+
+  protected def assumeValid(f: => Response): Response =
+    try {
+      f
+    } catch {
+      case vfe: ValidationFailedException =>
+        val entity = Json.toJson(vfe.failure).toString
+        Response.status(422).entity(entity).build()
+    }
 }
 
 object RestResource {

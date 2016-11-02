@@ -4,6 +4,7 @@ import mesosphere.marathon.Protos.Constraint
 import mesosphere.marathon.Protos.Constraint.Operator
 import mesosphere.marathon.core.instance.{ Instance, TestInstanceBuilder }
 import mesosphere.marathon.core.launcher.impl.TaskLabels
+import mesosphere.marathon.core.pod.{ BridgeNetwork, ContainerNetwork }
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.raml.Resources
 import mesosphere.marathon.state.PathId._
@@ -16,7 +17,7 @@ import mesosphere.mesos.ResourceMatcher.ResourceSelector
 import mesosphere.mesos.protos.Implicits._
 import mesosphere.mesos.protos.{ Resource, TextAttribute }
 import mesosphere.util.state.FrameworkId
-import org.apache.mesos.Protos.{ Attribute, ContainerInfo }
+import org.apache.mesos.Protos.Attribute
 import org.apache.mesos.{ Protos => Mesos }
 import org.scalatest.{ Inside, Matchers }
 
@@ -75,9 +76,9 @@ class ResourceMatcherTest extends MarathonSpec with Matchers with Inside {
       id = "/test".toRootPath,
       resources = Resources(cpus = 1.0, mem = 128.0, disk = 0.0),
       portDefinitions = Nil,
+      networks = Seq(BridgeNetwork()),
       container = Some(Container.Docker(
         image = "foo/bar",
-        network = Some(ContainerInfo.DockerInfo.Network.BRIDGE),
         portMappings = Seq(
           Container.PortMapping(31001, Some(0), 0, "tcp", Some("qax")),
           Container.PortMapping(31002, Some(0), 0, "tcp", Some("qab"))
@@ -103,9 +104,9 @@ class ResourceMatcherTest extends MarathonSpec with Matchers with Inside {
       id = "/test".toRootPath,
       resources = Resources(cpus = 1.0, mem = 128.0, disk = 0.0),
       portDefinitions = Nil,
+      networks = Seq(ContainerNetwork("whatever")),
       container = Some(Container.Docker(
         image = "foo/bar",
-        network = Some(ContainerInfo.DockerInfo.Network.USER),
         portMappings = Seq(
           Container.PortMapping(0, Some(0), 0, "tcp", Some("yas")),
           Container.PortMapping(31001, None, 0, "tcp", Some("qax")),
@@ -787,8 +788,7 @@ class ResourceMatcherTest extends MarathonSpec with Matchers with Inside {
   val appId = PathId("/test")
   def instance(id: String, version: Timestamp, attrs: Map[String, String]): Instance = { // linter:ignore:UnusedParameter
     val attributes: Seq[Attribute] = attrs.map {
-      case (name, value) =>
-        TextAttribute(name, value): Attribute
+      case (name, v) => TextAttribute(name, v): Attribute
     }(collection.breakOut)
     TestInstanceBuilder.newBuilder(appId, version = version).addTaskWithBuilder().taskStaged()
       .withAgentInfo(_.copy(attributes = attributes)).build().getInstance()

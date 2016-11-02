@@ -4,12 +4,10 @@ package integration
 import java.io.File
 
 import mesosphere.{ AkkaIntegrationFunTest, Unstable }
-import mesosphere.marathon.api.v2.json.AppUpdate
-import mesosphere.marathon.core.health.{ HealthCheck, MarathonHttpHealthCheck, PortReference }
-import mesosphere.marathon.core.readiness.ReadinessCheck
 import mesosphere.marathon.integration.setup._
-import mesosphere.marathon.raml.Resources
-import mesosphere.marathon.state._
+import mesosphere.marathon.raml.{ App, AppHealthCheck, AppHealthCheckProtocol, AppUpdate, EnvVarValue, PortDefinition, ReadinessCheck, UpgradeStrategy }
+import mesosphere.marathon.state.PathId
+import mesosphere.marathon.state.PathId._
 import org.apache.commons.io.FileUtils
 import org.scalatest.concurrent.Eventually
 
@@ -45,7 +43,7 @@ class ReadinessCheckIntegrationTest extends AkkaIntegrationFunTest with Embedded
 
     When("The service is upgraded")
     val oldTask = marathon.tasks(serviceDef.id).value.head
-    val update = marathon.updateApp(serviceDef.id, AppUpdate(env = Some(EnvVarValue(sys.env))))
+    marathon.updateApp(serviceDef.id, AppUpdate(env = Some(sys.env.mapValues(v => EnvVarValue(v)))), force = false)
     val newTask = eventually {
       marathon.tasks(serviceDef.id).value.find(_.id != oldTask.id).get
     }
@@ -61,11 +59,11 @@ class ReadinessCheckIntegrationTest extends AkkaIntegrationFunTest with Embedded
     waitForDeployment(update)
   }
 
-  def deploy(service: AppDefinition, continue: Boolean): Unit = {
+  def deploy(service: App, continue: Boolean): Unit = {
     Given("An application service")
     val result = marathon.createAppV2(service)
     result.code should be (201)
-    val task = waitForTasks(service.id, 1).head //make sure, the app has really started
+    val task = waitForTasks(service.id.toPath, 1).head //make sure, the app has really started
     val serviceFacade = new ServiceMockFacade(task)
     WaitTestSupport.waitUntil("ServiceMock is up", patienceConfig.timeout.totalNanos.nanos){ Try(serviceFacade.plan()).isSuccess }
 
@@ -79,29 +77,32 @@ class ReadinessCheckIntegrationTest extends AkkaIntegrationFunTest with Embedded
     waitForDeployment(result)
   }
 
-  def serviceProxy(appId: PathId, plan: String, withHealth: Boolean): AppDefinition = {
-    AppDefinition(
-      id = appId,
+  def serviceProxy(appId: PathId, plan: String, withHealth: Boolean): App = {
+    App(
+      id = appId.toString,
       cmd = Some(s"""$serviceMockScript '$plan'"""),
       executor = "//cmd",
-      resources = Resources(cpus = 0.5, mem = 128.0),
-      upgradeStrategy = UpgradeStrategy(0, 0),
-      portDefinitions = Seq(PortDefinition(0, name = Some("http"))),
+      cpus = 0.5,
+      mem = 128.0,
+      upgradeStrategy = Some(UpgradeStrategy(0, 0)),
+      portDefinitions = Some(Seq(PortDefinition(0, name = Some("http")))),
       healthChecks =
         if (withHealth)
-          Set(MarathonHttpHealthCheck(
+          Seq(AppHealthCheck(
+          protocol = AppHealthCheckProtocol.Http,
           path = Some("/ping"),
-          portIndex = Some(PortReference(0)),
-          interval = 2.seconds,
-          timeout = 1.second))
-        else Set.empty[HealthCheck],
+          portIndex = Some(0),
+          intervalSeconds = 2,
+          timeoutSeconds = 1
+        ))
+        else Nil,
       readinessChecks = Seq(ReadinessCheck(
-        "ready",
+        name = "ready",
         portName = "http",
         path = "/v1/plan",
-        interval = 2.seconds,
-        timeout = 1.second,
-        preserveLastResponse = true))
+        intervalSeconds = 2,
+        timeoutSeconds = 1,
+        preserveLastResponse = Some(true)))
     )
   }
 

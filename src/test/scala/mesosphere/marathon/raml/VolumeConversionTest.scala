@@ -36,9 +36,9 @@ class VolumeConversionTest extends MarathonSpec {
     raml.mode should be(ReadMode.Rw)
     raml.external should be(defined)
     raml.persistent should be(empty)
-    raml.external.get.name should be(external.name)
+    raml.external.get.name should be(Some(external.name))
     raml.external.get.options should be(external.options)
-    raml.external.get.provider should be(external.provider)
+    raml.external.get.provider should be(Some(external.provider))
     raml.external.get.size should be(external.size)
   }
 

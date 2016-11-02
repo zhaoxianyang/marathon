@@ -2,7 +2,6 @@ package mesosphere.marathon
 package raml
 
 import mesosphere.marathon.core.pod.MesosContainer
-import mesosphere.marathon.state
 import org.apache.mesos.{ Protos => Mesos }
 
 trait ContainerConversion extends HealthCheckConversion {
@@ -59,11 +58,8 @@ trait ContainerConversion extends HealthCheckConversion {
       DockerContainer(
         forcePullImage = Some(container.forcePullImage),
         image = container.image,
-        network = container.network.toRaml,
         parameters = container.parameters.toRaml,
-        portMappings = container.portMappings.toRaml,
         privileged = Some(container.privileged))
-
     }
 
     implicit val mesosDockerContainerWrites: Writes[state.Container.MesosDocker, DockerContainer] = Writes { container =>
@@ -78,8 +74,9 @@ trait ContainerConversion extends HealthCheckConversion {
     }
 
     def create(kind: EngineType, docker: Option[DockerContainer] = None, appc: Option[AppCContainer] = None): Container = {
-      Container(kind, docker = docker, appc = appc, volumes = container.volumes.toRaml)
+      Container(kind, docker = docker, appc = appc, volumes = container.volumes.toRaml, portMappings = container.portMappings.toRaml)
     }
+
     container match {
       case docker: state.Container.Docker => create(EngineType.Docker, docker = Some(docker.toRaml[DockerContainer]))
       case mesos: state.Container.MesosDocker => create(EngineType.Mesos, docker = Some(mesos.toRaml[DockerContainer]))

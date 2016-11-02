@@ -1,10 +1,10 @@
-package mesosphere.marathon.api.v2
+package mesosphere.marathon
+package api.v2
 
 import java.net._
 
 import com.wix.accord._
 import com.wix.accord.ViolationBuilder._
-import mesosphere.marathon.ValidationFailedException
 import mesosphere.marathon.state.FetchUri
 import org.slf4j.LoggerFactory
 import play.api.libs.json._
@@ -15,23 +15,57 @@ import scala.util.matching.Regex
 
 // TODO(jdef) move this into package "validation"
 object Validation {
+
+  /*
+  sealed trait Alias
+  case object Anonymous extends Alias
+  case class Named(name: String) extends Alias
+
+  implicit class StringName(name: String) {
+    def toAlias: Alias = Named(name)
+  }
+  */
+
   def validateOrThrow[T](t: T)(implicit validator: Validator[T]): T = validate(t) match {
     case Success => t
     case f: Failure => throw ValidationFailedException(t, f)
   }
 
-  implicit def optional[T](implicit validator: Validator[T]): Validator[Option[T]] = {
+  implicit def optional[T](implicit validator: Validator[T] /*, alias: Alias = Anonymous*/ ): Validator[Option[T]] = {
     new Validator[Option[T]] {
       override def apply(option: Option[T]): Result = option.map(validator).getOrElse(Success)
+      /*
+      override def apply(option: Option[T]): Result = option.map { t =>
+        validator(t) match {
+          case Success => Success
+          case f: Failure =>
+            alias match {
+              case Anonymous => f
+              case Named(name) =>
+                Failure(f.violations.map {
+                  case g: GroupViolation => g.copy(description = Some(name))
+                  case r: RuleViolation => r.copy(description = Some(name))
+                })
+            }
+        }
+      }.getOrElse(Success)
+      */
     }
   }
 
+  /**
+    * when used in a `validator` should be wrapped with `valid(...)`
+    */
   def definedAnd[T](implicit validator: Validator[T]): Validator[Option[T]] = {
     new Validator[Option[T]] {
       override def apply(option: Option[T]): Result = option.map(validator).getOrElse(
         Failure(Set(RuleViolation(None, "not defined", None)))
       )
     }
+  }
+
+  def implied[T](b: => Boolean)(implicit validator: Validator[T]): Validator[T] = new Validator[T] {
+    override def apply(t: T): Result = if (!b) Success else validator(t)
   }
 
   def conditional[T](b: T => Boolean)(implicit validator: Validator[T]): Validator[T] = new Validator[T] {
@@ -42,12 +76,19 @@ object Validation {
     new Validator[Iterable[T]] {
       override def apply(seq: Iterable[T]): Result = {
 
-        val violations = seq.map(item => (item, validator(item))).zipWithIndex.collect {
-          case ((item, f: Failure), pos: Int) => GroupViolation(item, "not valid", Some(s"($pos)"), f.violations)
+        val violations: Set[Violation] = seq match {
+          case m: Map[_, _] =>
+            m.map(item => (item, validator(item))).collect {
+              case ((k, v), f: Failure) => GroupViolation(k, "not valid", Some(s"($k)"), f.violations)
+            }(collection.breakOut)
+          case _ =>
+            seq.map(item => (item, validator(item))).zipWithIndex.collect {
+              case ((item, f: Failure), pos: Int) => GroupViolation(item, "not valid", Some(s"($pos)"), f.violations)
+            }(collection.breakOut)
         }
 
         if (violations.isEmpty) Success
-        else Failure(Set(GroupViolation(seq, "Seq contains elements, which are not valid.", None, violations.toSet)))
+        else Failure(Set(GroupViolation(seq, "contains elements, which are not valid.", None, violations)))
       }
     }
   }
@@ -87,6 +128,7 @@ object Validation {
       })
   }
 
+  // TODO: fix non-tail recursion
   def allRuleViolationsWithFullDescription(
     violation: Violation,
     parentDesc: Option[String] = None,
@@ -124,11 +166,11 @@ object Validation {
           case _ => true
         }
 
-        val desc = parentDesc.map {
-          p => Some(concatPath(p, g.description, prependSlash))
-        } getOrElse {
+        val desc: Option[String] = parentDesc.map { p =>
+          concatPath(p, g.description, prependSlash)
+        }.orElse (
           g.description.map(d => concatPath("", Some(d), prependSlash))
-        }
+        )
         allRuleViolationsWithFullDescription(c, desc, dot)
       }
     }
@@ -189,18 +231,18 @@ object Validation {
   def elementsAreUniqueBy[A, B](
     fn: A => B,
     errorMessage: String = "Elements must be unique.",
-    filter: B => Boolean = { _: B => true }): Validator[Seq[A]] = {
-    new Validator[Seq[A]] {
-      def apply(seq: Seq[A]) = areUnique(seq.map(fn).filter(filter), errorMessage)
+    filter: B => Boolean = { _: B => true }): Validator[Iterable[A]] = {
+    new Validator[Iterable[A]] {
+      def apply(seq: Iterable[A]) = areUnique(seq.map(fn).filter(filter).to[Seq], errorMessage)
     }
   }
 
   def elementsAreUniqueByOptional[A, B](
     fn: A => GenTraversableOnce[B],
     errorMessage: String = "Elements must be unique.",
-    filter: B => Boolean = { _: B => true }): Validator[Seq[A]] = {
-    new Validator[Seq[A]] {
-      def apply(seq: Seq[A]) = areUnique(seq.flatMap(fn).filter(filter), errorMessage)
+    filter: B => Boolean = { _: B => true }): Validator[Iterable[A]] = {
+    new Validator[Iterable[A]] {
+      def apply(seq: Iterable[A]) = areUnique(seq.flatMap(fn).filter(filter).to[Seq], errorMessage)
     }
   }
 

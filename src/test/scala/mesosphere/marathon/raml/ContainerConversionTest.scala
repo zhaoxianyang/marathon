@@ -2,7 +2,6 @@ package mesosphere.marathon
 package raml
 
 import mesosphere.FunTest
-import org.apache.mesos.{ Protos => Mesos }
 
 class ContainerConversionTest extends FunTest {
 
@@ -22,7 +21,7 @@ class ContainerConversionTest extends FunTest {
 
   test("A Mesos Docker container is created correctly") {
     Given("A mesos container")
-    val container = state.Container.MesosDocker(Seq.empty, "test", Some(credentials))
+    val container = state.Container.MesosDocker(Nil, "test", Nil, Some(credentials))
 
     When("The container is converted")
     val raml = container.toRaml[Container]
@@ -40,7 +39,7 @@ class ContainerConversionTest extends FunTest {
 
   test("A Mesos AppC container is created correctly") {
     Given("A mesos container")
-    val container = state.Container.MesosAppC(Seq.empty, "test", Some("id"))
+    val container = state.Container.MesosAppC(Nil, "test", Nil, Some("id"))
 
     When("The container is converted")
     val raml = container.toRaml[Container]
@@ -56,9 +55,8 @@ class ContainerConversionTest extends FunTest {
 
   test("A Docker Docker container is created correctly") {
     Given("A mesos container")
-    val network = Mesos.ContainerInfo.DockerInfo.Network.BRIDGE
     val portMapping = state.Container.PortMapping(23, Some(123), 0)
-    val container = state.Container.Docker(Seq.empty, "test", Some(network), Seq(portMapping))
+    val container = state.Container.Docker(Nil, "test", Seq(portMapping))
 
     When("The container is converted")
     val raml = container.toRaml[Container]
@@ -70,9 +68,9 @@ class ContainerConversionTest extends FunTest {
     raml.docker should be(defined)
     raml.docker.get.image should be("test")
     raml.docker.get.credential should be(empty)
-    raml.docker.get.network should be(Some(DockerNetwork.Bridge))
-    raml.docker.get.portMappings should have size (1)
-    val mapping = raml.docker.get.portMappings.head
+    raml.docker.get.network should be(empty)
+    raml.portMappings should have size 1
+    val mapping = raml.portMappings.head
     mapping.containerPort should be(portMapping.containerPort)
     mapping.hostPort should be(portMapping.hostPort)
     mapping.servicePort should be(portMapping.servicePort)

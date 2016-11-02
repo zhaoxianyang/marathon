@@ -6,7 +6,7 @@ import akka.actor.Props
 import akka.testkit.{ ImplicitSender, TestActorRef }
 import mesosphere.marathon.core.health.{ HealthResult, Healthy, MarathonTcpHealthCheck, PortReference }
 import mesosphere.marathon.core.instance.TestTaskBuilder
-import mesosphere.marathon.state.{ AppDefinition, PathId }
+import mesosphere.marathon.state.{ AppDefinition, PathId, PortDefinition }
 import mesosphere.marathon.test.{ MarathonActorSupport, MarathonSpec }
 import org.scalatest.Matchers
 
@@ -40,7 +40,7 @@ class HealthCheckWorkerActorTest
         .withHostPorts(Seq(socketPort))
 
     val ref = TestActorRef[HealthCheckWorkerActor](Props(classOf[HealthCheckWorkerActor]))
-    val app = AppDefinition(id = appId)
+    val app = AppDefinition(id = appId, portDefinitions = Seq(PortDefinition(0)))
     ref ! HealthCheckJob(app, task, MarathonTcpHealthCheck(portIndex = Some(PortReference(0))))
 
     try { Await.result(res, 1.seconds) }
@@ -66,7 +66,7 @@ class HealthCheckWorkerActorTest
         .withHostPorts(Seq(socketPort))
 
     val ref = TestActorRef[HealthCheckWorkerActor](Props(classOf[HealthCheckWorkerActor]))
-    val app = AppDefinition(id = appId)
+    val app = AppDefinition(id = appId, portDefinitions = Seq(PortDefinition(0)))
     ref ! HealthCheckJob(app, task, MarathonTcpHealthCheck(portIndex = Some(PortReference(0))))
 
     try { Await.result(res, 1.seconds) }
