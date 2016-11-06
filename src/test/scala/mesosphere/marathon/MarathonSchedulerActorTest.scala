@@ -525,10 +525,13 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     instanceTracker.specInstancesLaunchedSync(app.id) returns Seq.empty[Instance]
     appRepo.delete(app.id) returns Future.successful(Done)
 
-    val schedulerActor = TestActorRef[MarathonSchedulerActor](
+    // Dummy deployment manager to make sure, that it will not cancel the deployment.
+    val dummyProps: SchedulerActions => Props = schedulerActions => Props.empty
+
+    val schedulerActor = system.actorOf(
       MarathonSchedulerActor.props(
         schedulerActions,
-        deploymentManagerProps,
+        dummyProps,
         historyActorProps,
         deploymentRepo,
         hcManager,
@@ -536,25 +539,22 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
         queue,
         holder,
         electionService,
-        system.eventStream
+        system.eventStream,
+        1.milliseconds
       )
     )
+
     try {
-      val probe = TestProbe()
-      schedulerActor.tell(LocalLeadershipEvent.ElectedAsLeader, probe.testActor)
-      schedulerActor.tell(Deploy(plan), probe.testActor)
+      schedulerActor ! LocalLeadershipEvent.ElectedAsLeader
+      schedulerActor ! Deploy(plan)
 
-      probe.expectMsgType[DeploymentStarted]
+      expectMsgType[DeploymentStarted]
 
-      schedulerActor.tell(Deploy(plan, force = true), probe.testActor)
+      schedulerActor ! Deploy(plan, force = true)
 
-      val answer = probe.expectMsgType[CommandFailed]
-
+      val answer = expectMsgType[CommandFailed]
       answer.reason.isInstanceOf[TimeoutException] should be(true)
       answer.reason.getMessage should be
-
-      // this test has more messages sometimes!
-      // needs: probe.expectNoMsg()
     } finally {
       stopActor(schedulerActor)
     }
