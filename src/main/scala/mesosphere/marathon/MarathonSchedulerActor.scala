@@ -1,10 +1,7 @@
 package mesosphere.marathon
 
-import java.util.concurrent.TimeoutException
-
 import akka.actor._
 import akka.event.{ EventStream, LoggingReceive }
-import akka.pattern.ask
 import akka.stream.Materializer
 import mesosphere.marathon.MarathonSchedulerActor.ScaleRunSpec
 import mesosphere.marathon.core.election.{ ElectionService, LocalLeadershipEvent }
@@ -98,7 +95,7 @@ class MarathonSchedulerActor private (
     case _ => stash()
   }
 
-  def started: Receive = LoggingReceive.withLabel("started")(sharedHandlers orElse {
+  def started: Receive = LoggingReceive.withLabel("started") {
     case LocalLeadershipEvent.Standby =>
       log.info("Suspending scheduler actor")
       healthCheckManager.removeAll()
@@ -175,12 +172,7 @@ class MarathonSchedulerActor private (
         res.sendAnswer(origSender, cmd)
       }
       withLockFor(runSpecId) { killTasks() }
-  })
 
-  /**
-    * handlers for messages that unlock run specs and to retrieve running deployments
-    */
-  def sharedHandlers: Receive = {
     case DeploymentFinished(plan) =>
       lockedRunSpecs --= plan.affectedRunSpecIds
       deploymentSuccess(plan)
@@ -195,53 +187,6 @@ class MarathonSchedulerActor private (
 
     case RetrieveRunningDeployments =>
       deploymentManager forward RetrieveRunningDeployments
-  }
-
-  /**
-    * Waits for all the rnunSpecs affected by @plan to be unlocked
-    * and starts @plan. If it receives a CancellationTimeoutExceeded
-    * message, it will mark the deployment as failed and go into
-    * the started state.
-    *
-    * @param plan The deployment plan we are trying to execute.
-    * @param origSender The original sender of the Deploy message.
-    * @return
-    */
-  @SuppressWarnings(Array("all")) // async/await
-  def awaitCancellation(plan: DeploymentPlan, origSender: ActorRef, cancellationHandler: Cancellable): Receive =
-    sharedHandlers.andThen[Unit] { _ =>
-      if (tryDeploy(plan, origSender)) {
-        cancellationHandler.cancel()
-      }
-    } orElse {
-      case CancellationTimeoutExceeded =>
-        val reason = new TimeoutException("Exceeded timeout for canceling conflicting deployments.")
-        async { // linter:ignore UnnecessaryElseBranch
-          await(deploymentFailed(plan, reason))
-          origSender ! CommandFailed(Deploy(plan, force = true), reason)
-          unstashAll()
-          context.become(started)
-        }
-      case _ => stash()
-    }
-
-  /**
-    * If all required runSpecs are unlocked, start the deployment,
-    * unstash all messages and put actor in started state
-    *
-    * @param plan The deployment plan that has been sent with force=true
-    * @param origSender The original sender of the deployment
-    */
-  def tryDeploy(plan: DeploymentPlan, origSender: ActorRef): Boolean = {
-    val affectedRunSpecs = plan.affectedRunSpecIds
-    if (!lockedRunSpecs.exists(affectedRunSpecs)) {
-      deploy(origSender, Deploy(plan, force = false))
-      unstashAll()
-      context.become(started)
-      true
-    } else {
-      false
-    }
   }
 
   /**
@@ -275,61 +220,34 @@ class MarathonSchedulerActor private (
 
   def deploy(origSender: ActorRef, cmd: Deploy): Unit = {
     val plan = cmd.plan
-    val ids = plan.affectedRunSpecIds
+    val runSpecIds = plan.affectedRunSpecIds
 
-    val res = withLockFor(ids) {
-      deploy(plan)
+    val res = withLockFor(runSpecIds) {
+      deploymentManager ! StartDeployment(plan, origSender, cmd.force)
     }
 
     res match {
-      case Success(f) =>
-        f.map(_ => if (origSender != Actor.noSender) origSender ! cmd.answer)
+      case Success(_) =>
+      // Not much to do here since the DeploymentManager will take care of the rest
       case Failure(e: LockingFailedException) if cmd.force =>
-        deploymentManager ! CancelConflictingDeployments(plan)
-        val cancellationHandler = context.system.scheduler.scheduleOnce(
-          cancellationTimeout,
-          self,
-          CancellationTimeoutExceeded)
-
-        context.become(awaitCancellation(plan, origSender, cancellationHandler))
+        // Lock the affected Ids and send the deployment anyway - DeploymentManager will take
+        // care of canceling the conflicting deployments etc.
+        lockedRunSpecs ++= runSpecIds
+        deploymentManager ! StartDeployment(plan, origSender, cmd.force)
       case Failure(e: LockingFailedException) =>
-        deploymentManager.ask(RetrieveRunningDeployments)(2.seconds)
-          .mapTo[RunningDeployments]
-          .foreach {
-            case RunningDeployments(plans) =>
-              def intersectsWithNewPlan(existingPlan: DeploymentPlan): Boolean = {
-                existingPlan.affectedRunSpecIds.intersect(plan.affectedRunSpecIds).nonEmpty
-              }
-              val relatedDeploymentIds: Seq[String] = plans.collect {
-                case DeploymentStepInfo(p, _, _, _) if intersectsWithNewPlan(p) => p.id
-              }
-              origSender ! CommandFailed(cmd, AppLockedException(relatedDeploymentIds))
-          }
+        deploymentManager ! StartDeployment(plan, origSender, cmd.force)
     }
   }
 
-  def deploy(plan: DeploymentPlan): Future[Unit] = {
-    deploymentRepository.store(plan).map { _ =>
-      deploymentManager ! PerformDeployment(plan)
-    }
-  }
-
-  def deploymentSuccess(plan: DeploymentPlan): Future[Unit] = {
-    log.info(s"Deployment ${plan.id}:${plan.version} of ${plan.target.id} successful")
+  def deploymentSuccess(plan: DeploymentPlan): Unit = {
+    log.info(s"Deployment ${plan.id}:${plan.version} of ${plan.target.id} finished")
     eventBus.publish(DeploymentSuccess(plan.id, plan))
-    deploymentRepository.delete(plan.id).map(_ => ())
   }
 
-  def deploymentFailed(plan: DeploymentPlan, reason: Throwable): Future[Unit] = {
+  def deploymentFailed(plan: DeploymentPlan, reason: Throwable): Unit = {
     log.error(reason, s"Deployment ${plan.id}:${plan.version} of ${plan.target.id} failed")
     plan.affectedRunSpecIds.foreach(runSpecId => launchQueue.purge(runSpecId))
     eventBus.publish(DeploymentFailed(plan.id, plan))
-    reason match {
-      case _: DeploymentCanceledException =>
-        deploymentRepository.delete(plan.id).map(_ => ())
-      case _ =>
-        Future.successful(())
-    }
   }
 }
 

@@ -493,6 +493,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     appRepo.store(any) returns Future.successful(Done)
     appRepo.get(app.id) returns Future.successful(None)
     instanceTracker.specInstancesLaunchedSync(app.id) returns Seq.empty[Instance]
+    instanceTracker.specInstancesSync(app.id) returns Seq.empty[Instance]
     appRepo.delete(app.id) returns Future.successful(Done)
 
     val schedulerActor = createActor()
@@ -511,8 +512,8 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     }
   }
 
-  // TODO: Fix  this test...
-  test("Cancellation timeout - this test is really racy and fails intermittently.", Unstable) {
+  // TODO (AD) : since there is no cancelation exception anymore - should we remove the test completely?
+  ignore("Cancellation timeout") {
     val f = new Fixture
     import f._
     val app = AppDefinition(id = PathId("app1"), cmd = Some("cmd"), instances = 2, upgradeStrategy = UpgradeStrategy(0.5))
@@ -642,7 +643,8 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
       hcManager,
       system.eventStream,
       readinessCheckExecutor,
-      holder
+      holder,
+      deploymentRepo
     ))
 
     val historyActorProps: Props = Props(new HistoryActor(system.eventStream, taskFailureEventRepository))

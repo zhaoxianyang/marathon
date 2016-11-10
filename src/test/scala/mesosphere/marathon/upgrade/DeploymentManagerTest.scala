@@ -1,5 +1,6 @@
 package mesosphere.marathon.upgrade
 
+import akka.Done
 import akka.actor.ActorRef
 import akka.event.EventStream
 import akka.testkit.TestActor.{ AutoPilot, NoAutoPilot }
@@ -16,21 +17,22 @@ import mesosphere.marathon.io.storage.StorageProvider
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state.{ AppDefinition, Group, PathId }
-import mesosphere.marathon.storage.repository.AppRepository
+import mesosphere.marathon.storage.repository.{ AppRepository, DeploymentRepository }
 import mesosphere.marathon.storage.repository.legacy.AppEntityRepository
 import mesosphere.marathon.storage.repository.legacy.store.{ InMemoryStore, MarathonStore }
 import mesosphere.marathon.test.{ MarathonActorSupport, MarathonTestHelper, Mockito }
 import mesosphere.marathon.upgrade.DeploymentActor.Cancel
-import mesosphere.marathon.upgrade.DeploymentManager.{ CancelDeployment, DeploymentFailed, PerformDeployment, StopAllDeployments }
+import mesosphere.marathon.upgrade.DeploymentManager._
 import mesosphere.marathon.{ MarathonConf, MarathonSchedulerDriverHolder, SchedulerActions }
 import org.apache.mesos.SchedulerDriver
 import org.rogach.scallop.ScallopConf
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{ Seconds, Span }
 import org.scalatest.{ BeforeAndAfter, FunSuiteLike, Matchers }
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
-import scala.concurrent.{ Await, ExecutionContext }
+import scala.concurrent.{ Await, ExecutionContext, Future }
 
 class DeploymentManagerTest
     extends MarathonActorSupport
@@ -40,6 +42,8 @@ class DeploymentManagerTest
     with Mockito
     with Eventually
     with ImplicitSender {
+
+  private[this] val log = LoggerFactory.getLogger(getClass)
 
   test("deploy") {
     val f = new Fixture
@@ -51,7 +55,7 @@ class DeploymentManagerTest
     val plan = DeploymentPlan(oldGroup, newGroup)
 
     f.launchQueue.get(app.id) returns None
-    manager ! PerformDeployment(plan)
+    manager ! StartDeployment(plan, ActorRef.noSender)
 
     awaitCond(
       manager.underlyingActor.runningDeployments.contains(plan.id),
@@ -89,7 +93,7 @@ class DeploymentManagerTest
     val newGroup = Group("/".toRootPath, Map(app.id -> app))
     val plan = DeploymentPlan(oldGroup, newGroup)
 
-    manager ! PerformDeployment(plan)
+    manager ! StartDeployment(plan, ActorRef.noSender)
 
     manager ! CancelDeployment(plan.id)
 
@@ -104,8 +108,8 @@ class DeploymentManagerTest
     val app1 = AppDefinition("app1".toRootPath)
     val app2 = AppDefinition("app2".toRootPath)
     val oldGroup = Group("/".toRootPath)
-    manager ! PerformDeployment(DeploymentPlan(oldGroup, Group("/".toRootPath, Map(app1.id -> app1))))
-    manager ! PerformDeployment(DeploymentPlan(oldGroup, Group("/".toRootPath, Map(app2.id -> app2))))
+    manager ! StartDeployment(DeploymentPlan(oldGroup, Group("/".toRootPath, Map(app1.id -> app1))), ActorRef.noSender)
+    manager ! StartDeployment(DeploymentPlan(oldGroup, Group("/".toRootPath, Map(app2.id -> app2))), ActorRef.noSender)
     eventually(manager.underlyingActor.runningDeployments should have size 2)
 
     manager ! StopAllDeployments
@@ -119,6 +123,7 @@ class DeploymentManagerTest
     val driver: SchedulerDriver = mock[SchedulerDriver]
     val holder: MarathonSchedulerDriverHolder = new MarathonSchedulerDriverHolder
     holder.driver = Some(driver)
+    val deploymentRepo = mock[DeploymentRepository]
     val eventBus: EventStream = mock[EventStream]
     val launchQueue: LaunchQueue = mock[LaunchQueue]
     val config: MarathonConf = new ScallopConf(Seq("--master", "foo")) with MarathonConf {
@@ -139,8 +144,20 @@ class DeploymentManagerTest
     val readinessCheckExecutor: ReadinessCheckExecutor = mock[ReadinessCheckExecutor]
 
     def deploymentManager(): TestActorRef[DeploymentManager] = TestActorRef (
-      DeploymentManager.props(taskTracker, taskKillService, launchQueue, scheduler, storage, hcManager, eventBus, readinessCheckExecutor, holder)
+      DeploymentManager.props(
+        taskTracker,
+        taskKillService,
+        launchQueue,
+        scheduler,
+        storage,
+        hcManager,
+        eventBus,
+        readinessCheckExecutor,
+        holder,
+        deploymentRepo)
     )
 
+    deploymentRepo.store(any[DeploymentPlan]) returns Future.successful(Done)
+    deploymentRepo.delete(any[String]) returns Future.successful(Done)
   }
 }

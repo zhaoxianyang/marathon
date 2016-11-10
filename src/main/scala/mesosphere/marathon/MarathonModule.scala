@@ -147,7 +147,8 @@ class MarathonModule(conf: MarathonConf, http: HttpConf)
           healthCheckManager,
           eventBus,
           readinessCheckExecutor,
-          driverHolder
+          driverHolder,
+          deploymentRepository
         )
       )
     }
