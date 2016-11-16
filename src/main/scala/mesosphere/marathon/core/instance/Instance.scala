@@ -78,6 +78,17 @@ case class Instance(
                 InstanceUpdateEffect.Update(updated, oldState = Some(this), events)
               }
 
+            // We might still become UnreachableInactive.
+            case TaskUpdateEffect.Noop if status == Condition.Unreachable && this.state.condition != Condition.UnreachableInactive =>
+              val updated: Instance = updatedInstance(task, now)
+              if (updated.state.condition == Condition.UnreachableInactive) {
+                val events = eventsGenerator.events(updated.state.condition, updated, Some(task), now, updated.state.condition != this.state.condition)
+                InstanceUpdateEffect.Update(updated, oldState = Some(this), events)
+              }
+              else {
+                InstanceUpdateEffect.Noop(instance.instanceId)
+              }
+
             case TaskUpdateEffect.Noop =>
               InstanceUpdateEffect.Noop(instance.instanceId)
 
