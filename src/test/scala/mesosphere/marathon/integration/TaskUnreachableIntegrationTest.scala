@@ -4,7 +4,7 @@ package integration
 import mesosphere.Unstable
 import mesosphere.marathon.integration.facades.ITEnrichedTask
 import mesosphere.marathon.integration.setup._
-import org.scalatest.{BeforeAndAfter, GivenWhenThen, Matchers}
+import org.scalatest.{ BeforeAndAfter, GivenWhenThen, Matchers }
 
 class TaskUnreachableIntegrationTest extends IntegrationFunSuite
     with WithMesosCluster
