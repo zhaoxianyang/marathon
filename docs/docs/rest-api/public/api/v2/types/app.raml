@@ -258,6 +258,24 @@ types:
         type: datetime
         description: The version of this definition
       versionInfo?: versionInfo.VersionInfo
+      timeUntilInactive?:
+        type: integer
+        format: int64
+        default: 300
+        minimum: 1
+        description: |
+          If an instance is unreachable for longer than timeUntilInactive seconds it is marked
+          as inactive. This will trigger a new instance launch. The original task is not
+          expunged yet.
+      timeUntilExpunge?:
+        type: integer
+        format: int64
+        default: 600
+        minimum: 1
+        description: |
+          If an instance is unreachable for longer than timeUntilExpunge seconds it will be expunged.
+          That means it will be killed if it ever comes back. Instances are usually marked as
+          unreachable before they are expunged but they don't have to.
   AppList:
     type: object
     properties:
