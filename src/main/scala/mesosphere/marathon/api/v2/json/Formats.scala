@@ -28,6 +28,8 @@ import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 
 // TODO: We should replace this entire thing with the auto-generated formats from the RAML.
+// See https://mesosphere.atlassian.net/browse/MARATHON-1291
+// https://mesosphere.atlassian.net/browse/MARATHON-1292
 object Formats extends Formats {
 
   implicit class ReadsWithDefault[A](val reads: Reads[Option[A]]) extends AnyVal {
