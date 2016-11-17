@@ -511,7 +511,7 @@ class MarathonSchedulerActorTest extends MarathonActorSupport
     }
   }
 
-  // TODO (AD) : since there is no cancelation exception anymore - should we remove the test completely?
+  // TODO (AD) : since there is no cancellation exception anymore - should we remove the test completely?
   ignore("Cancellation timeout") {
     val f = new Fixture
     import f._

@@ -71,10 +71,7 @@ class MarathonSchedulerActor private (
   def suspended: Receive = LoggingReceive.withLabel("suspended"){
     case LocalLeadershipEvent.ElectedAsLeader =>
       log.info("Starting scheduler actor")
-      deploymentRepository.all().runWith(Sink.seq).onComplete {
-        case Success(deployments) => self ! RecoverDeployments(deployments)
-        case Failure(_) => self ! RecoverDeployments(Nil)
-      }
+      deploymentManager ! RecoverDeployments
 
     case RecoverDeployments(deployments) =>
       deployments.foreach { plan =>
@@ -99,7 +96,7 @@ class MarathonSchedulerActor private (
     case LocalLeadershipEvent.Standby =>
       log.info("Suspending scheduler actor")
       healthCheckManager.removeAll()
-      deploymentManager ! StopAllDeployments
+      deploymentManager ! ShutdownDeployments
       lockedRunSpecs = Set.empty
       context.become(suspended)
 
