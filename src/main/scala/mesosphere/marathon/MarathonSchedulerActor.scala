@@ -14,7 +14,7 @@ import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.core.task.termination.{ KillReason, KillService }
 import mesosphere.marathon.core.task.tracker.InstanceTracker
 import mesosphere.marathon.state.{ PathId, RunSpec }
-import mesosphere.marathon.storage.repository.{ DeploymentRepository, GroupRepository, ReadOnlyAppRepository, ReadOnlyPodRepository }
+import mesosphere.marathon.storage.repository.{ GroupRepository, ReadOnlyAppRepository, ReadOnlyPodRepository }
 import mesosphere.marathon.stream._
 import mesosphere.marathon.upgrade.DeploymentManager._
 import mesosphere.marathon.upgrade.{ DeploymentManager, DeploymentPlan, ScalingProposition }
@@ -25,7 +25,6 @@ import org.apache.mesos.SchedulerDriver
 import org.slf4j.LoggerFactory
 
 import scala.async.Async.{ async, await }
-import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext, Future }
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
@@ -36,14 +35,12 @@ class MarathonSchedulerActor private (
   createSchedulerActions: ActorRef => SchedulerActions,
   deploymentManagerProps: SchedulerActions => Props,
   historyActorProps: Props,
-  deploymentRepository: DeploymentRepository,
   healthCheckManager: HealthCheckManager,
   killService: KillService,
   launchQueue: LaunchQueue,
   marathonSchedulerDriverHolder: MarathonSchedulerDriverHolder,
   electionService: ElectionService,
-  eventBus: EventStream,
-  cancellationTimeout: FiniteDuration = 1.minute)(implicit val mat: Materializer) extends Actor
+  eventBus: EventStream)(implicit val mat: Materializer) extends Actor
     with ActorLogging with Stash {
   import context.dispatcher
   import mesosphere.marathon.MarathonSchedulerActor._
@@ -73,7 +70,7 @@ class MarathonSchedulerActor private (
       log.info("Starting scheduler actor")
       deploymentManager ! RecoverDeployments
 
-    case RecoverDeployments(deployments) =>
+    case DeploymentsRecovered(deployments) =>
       deployments.foreach { plan =>
         log.info(s"Recovering deployment:\n$plan")
         deploy(context.system.deadLetters, Deploy(plan, force = false))
@@ -254,30 +251,26 @@ object MarathonSchedulerActor {
     createSchedulerActions: ActorRef => SchedulerActions,
     deploymentManagerProps: SchedulerActions => Props,
     historyActorProps: Props,
-    deploymentRepository: DeploymentRepository,
     healthCheckManager: HealthCheckManager,
     killService: KillService,
     launchQueue: LaunchQueue,
     marathonSchedulerDriverHolder: MarathonSchedulerDriverHolder,
     electionService: ElectionService,
-    eventBus: EventStream,
-    cancellationTimeout: FiniteDuration = 1.minute)(implicit mat: Materializer): Props = {
+    eventBus: EventStream)(implicit mat: Materializer): Props = {
     Props(new MarathonSchedulerActor(
       createSchedulerActions,
       deploymentManagerProps,
       historyActorProps,
-      deploymentRepository,
       healthCheckManager,
       killService,
       launchQueue,
       marathonSchedulerDriverHolder,
       electionService,
-      eventBus,
-      cancellationTimeout
+      eventBus
     ))
   }
 
-  case class RecoverDeployments(deployments: Seq[DeploymentPlan])
+  case class DeploymentsRecovered(deployments: Seq[DeploymentPlan])
 
   sealed trait Command {
     def answer: Event

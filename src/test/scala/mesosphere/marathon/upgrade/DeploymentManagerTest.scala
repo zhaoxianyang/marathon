@@ -5,11 +5,12 @@ import java.util.concurrent.LinkedBlockingDeque
 import akka.Done
 import akka.actor.{ ActorRef, Props }
 import akka.event.EventStream
+import akka.stream.scaladsl.Source
 import akka.testkit.TestActor.{ AutoPilot, NoAutoPilot }
 import akka.testkit.{ ImplicitSender, TestActor, TestActorRef, TestProbe }
 import akka.util.Timeout
 import com.codahale.metrics.MetricRegistry
-import mesosphere.marathon.MarathonSchedulerActor.{ CommandFailed, DeploymentStarted }
+import mesosphere.marathon.MarathonSchedulerActor.{ CommandFailed, DeploymentStarted, DeploymentsRecovered }
 import mesosphere.marathon.core.health.HealthCheckManager
 import mesosphere.marathon.core.launchqueue.LaunchQueue
 import mesosphere.marathon.core.leadership.AlwaysElectedLeadershipModule
@@ -20,9 +21,9 @@ import mesosphere.marathon.io.storage.StorageProvider
 import mesosphere.marathon.metrics.Metrics
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state.{ AppDefinition, Group, PathId }
-import mesosphere.marathon.storage.repository.{ AppRepository, DeploymentRepository }
 import mesosphere.marathon.storage.repository.legacy.AppEntityRepository
 import mesosphere.marathon.storage.repository.legacy.store.{ InMemoryStore, MarathonStore }
+import mesosphere.marathon.storage.repository.{ AppRepository, DeploymentRepository }
 import mesosphere.marathon.test.{ MarathonActorSupport, MarathonTestHelper, Mockito }
 import mesosphere.marathon.upgrade.DeploymentActor.Cancel
 import mesosphere.marathon.upgrade.DeploymentManager._
@@ -57,7 +58,9 @@ class DeploymentManagerTest
     val newGroup = Group("/".toRootPath, Map(app.id -> app))
     val plan = DeploymentPlan(oldGroup, newGroup)
 
-    f.launchQueue.get(app.id) returns None
+    manager ! RecoverDeployments
+    expectMsgType[DeploymentsRecovered]
+
     manager ! StartDeployment(plan, ActorRef.noSender)
 
     awaitCond(manager.underlyingActor.runningDeployments.contains(plan.id), 5.seconds)
@@ -72,6 +75,9 @@ class DeploymentManagerTest
     val oldGroup = Group("/".toRootPath)
     val newGroup = Group("/".toRootPath, Map(app.id -> app))
     val plan = DeploymentPlan(oldGroup, newGroup)
+
+    manager ! RecoverDeployments
+    expectMsgType[DeploymentsRecovered]
 
     manager ! StartDeployment(plan, ActorRef.noSender)
 
@@ -91,7 +97,9 @@ class DeploymentManagerTest
     val newGroup = Group("/".toRootPath, Map(app.id -> app))
     val plan = DeploymentPlan(oldGroup, newGroup, id = Some("d1"))
 
-    f.launchQueue.get(app.id) returns None
+    manager ! RecoverDeployments
+    expectMsgType[DeploymentsRecovered]
+
     manager ! StartDeployment(plan, ActorRef.noSender)
 
     awaitCond(manager.underlyingActor.runningDeployments.contains(plan.id), 5.seconds)
@@ -110,9 +118,13 @@ class DeploymentManagerTest
 
     val oldGroup = Group("/".toRootPath)
     val newGroup = Group("/".toRootPath, Map(app.id -> app))
-    val plan = DeploymentPlan(oldGroup, newGroup, id = Some("d1"))
+    val plan = DeploymentPlan(oldGroup, newGroup, id = Some("b1"))
+
+    manager ! RecoverDeployments
+    expectMsgType[DeploymentsRecovered]
 
     manager ! StartDeployment(plan, self)
+    expectMsgType[DeploymentStarted]
 
     awaitCond(manager.underlyingActor.runningDeployments.contains(plan.id), 5.seconds)
     manager.underlyingActor.runningDeployments(plan.id).status should be (DeploymentManager.Deploying)
@@ -130,7 +142,10 @@ class DeploymentManagerTest
 
     val oldGroup = Group("/".toRootPath)
     val newGroup = Group("/".toRootPath, Map(app.id -> app))
-    val plan = DeploymentPlan(oldGroup, newGroup, id = Some("d1"))
+    val plan = DeploymentPlan(oldGroup, newGroup, id = Some("c1"))
+
+    manager ! RecoverDeployments
+    expectMsgType[DeploymentsRecovered]
 
     manager ! StartDeployment(plan, self)
     expectMsgType[DeploymentStarted]
@@ -181,6 +196,9 @@ class DeploymentManagerTest
     val newGroup = Group("/".toRootPath, Map(app.id -> app))
     val plan = DeploymentPlan(oldGroup, newGroup)
 
+    manager ! RecoverDeployments
+    expectMsgType[DeploymentsRecovered]
+
     manager ! StartDeployment(plan, self)
     expectMsgType[DeploymentStarted]
 
@@ -188,7 +206,7 @@ class DeploymentManagerTest
     eventually(manager.underlyingActor.runningDeployments(plan.id).status should be (DeploymentManager.Canceling))
   }
 
-  test("Stop All Deployments") {
+  test("Shutdown deployments") {
     val f = new Fixture
     val manager = f.deploymentManager()
     implicit val timeout = Timeout(1.minute)
@@ -196,6 +214,10 @@ class DeploymentManagerTest
     val app1 = AppDefinition("app1".toRootPath)
     val app2 = AppDefinition("app2".toRootPath)
     val oldGroup = Group("/".toRootPath)
+
+    manager ! RecoverDeployments
+    expectMsgType[DeploymentsRecovered]
+
     manager ! StartDeployment(DeploymentPlan(oldGroup, Group("/".toRootPath, Map(app1.id -> app1))), ActorRef.noSender)
     manager ! StartDeployment(DeploymentPlan(oldGroup, Group("/".toRootPath, Map(app2.id -> app2))), ActorRef.noSender)
     eventually(manager.underlyingActor.runningDeployments should have size 2)
@@ -232,19 +254,8 @@ class DeploymentManagerTest
     val readinessCheckExecutor: ReadinessCheckExecutor = mock[ReadinessCheckExecutor]
 
     // A method that returns dummy props. Used to control the deployments progress. Otherwise the tests become racy
-    // and depending on what actors sends the message first.
-    val deploymentActorProps: (ActorRef, ActorRef, SchedulerDriver, KillService, SchedulerActions, DeploymentPlan, InstanceTracker, LaunchQueue, StorageProvider, HealthCheckManager, EventStream, ReadinessCheckExecutor) => Props = (a: ActorRef,
-      b: ActorRef,
-      c: SchedulerDriver,
-      d: KillService,
-      e: SchedulerActions,
-      f: DeploymentPlan,
-      g: InstanceTracker,
-      h: LaunchQueue,
-      i: StorageProvider,
-      j: HealthCheckManager,
-      k: EventStream,
-      l: ReadinessCheckExecutor) => TestActor.props(new LinkedBlockingDeque())
+    // and depending on when DeploymentActor sends DeploymentFinished message.
+    val deploymentActorProps: (Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Props = (_, _, _, _, _, _, _, _, _, _, _, _) => TestActor.props(new LinkedBlockingDeque())
 
     def deploymentManager(): TestActorRef[DeploymentManager] = TestActorRef (
       DeploymentManager.props(
@@ -262,5 +273,6 @@ class DeploymentManagerTest
     )
     deploymentRepo.store(any[DeploymentPlan]) returns Future.successful(Done)
     deploymentRepo.delete(any[String]) returns Future.successful(Done)
+    deploymentRepo.all() returns Source.empty
   }
 }

@@ -5,10 +5,10 @@ import akka.actor.SupervisorStrategy.Stop
 import akka.actor._
 import akka.event.EventStream
 import akka.stream.Materializer
-import mesosphere.marathon.MarathonSchedulerActor.{CommandFailed, DeploymentStarted, RecoverDeployments, RetrieveRunningDeployments, RunningDeployments}
+import mesosphere.marathon.MarathonSchedulerActor.{ CommandFailed, DeploymentStarted, DeploymentsRecovered, RetrieveRunningDeployments, RunningDeployments }
 import mesosphere.marathon.core.health.HealthCheckManager
 import mesosphere.marathon.core.launchqueue.LaunchQueue
-import mesosphere.marathon.core.readiness.{ReadinessCheckExecutor, ReadinessCheckResult}
+import mesosphere.marathon.core.readiness.{ ReadinessCheckExecutor, ReadinessCheckResult }
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.core.task.termination.KillService
 import mesosphere.marathon.core.task.tracker.InstanceTracker
@@ -19,26 +19,85 @@ import mesosphere.marathon.stream.Sink
 import org.apache.mesos.SchedulerDriver
 import org.slf4j.LoggerFactory
 
+import scala.async.Async.{ async, await }
 import scala.collection.immutable.Seq
 import scala.collection.mutable
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.{ Future, Promise }
 import scala.util.control.NonFatal
-import scala.async.Async.{async, await}
-import scala.util.{Failure, Success}
+import scala.util.{ Failure, Success }
 
+// format: OFF
+/**
+  * Basic deployment message flow:
+  *
+  * 1. Every deployment starts with a StartDeployment message. In the simplest case when there are no conflicts
+  *   deployment is added to the list of running deployments and saved in the repository.
+  * 2. On completion of the store operation (which returns a Future) we proceed with the deployment by sending
+  *   ourselves a LaunchDeploymentActor message.
+  * 3. Upon receiving a LaunchDeploymentActor we check if the deployment is still scheduled. It can happen that
+  *   while we're were waiting for the deployment to be stored another (forced) deployment canceled (and deleted
+  *   from the repository) this one. In this case the deployment is discarded.
+  * 4. When the deployment is finished, DeploymentActor sends a FinishedDeployment message which will remove it
+  *   from the list of running deployment and delete from repository.
+  *
+  * Basic flow visualised:
+  *
+  * -> StartDeployment (1)    | - save deployment and mark it as [Scheduling]
+  *                           | -> repository.store(plan).onComplete (2)
+  *                           |     <- LaunchDeploymentActor
+  *                           |
+  * -> LaunchDeploymentActor  | - mark deployment as [Deploying]
+  *                           | - spawn DeploymentActor (3)
+  *                           |     <- FinishedDeployment
+  *                           |
+  * -> FinishedDeployment (4) | - remove from runningDeployments
+  *                           | - delete from repository
+  *                           ˅
+  *
+  * Deployment message flow with conflicts:
+  *
+  * Handling a forced deployment which has conflicts with existing ones is similar to the basic flow with a few
+  * differences:
+  *
+  * 2. After receiving StartDeployment message all conflicting deployments are cancelled by spawning a StopActor.
+  *   The cancellation futures are saved and the deployments are marked as [Cancelling]. Afterwards all conflicts
+  *   are deleted from repository. On completion the new plan is stored in the repository. On completion of
+  *   the store operation a CancelConflictingDeployments is sent to ourselves with the conflicts.
+  *
+  * 2.5 If the deployment is still scheduled we wait for all the cancellation futures of the conflicts to complete.
+  *   When that's the case a LaunchDeploymentActor message is sent to ourselves and the rest of the deployment is
+  *   equal to the basic flow.
+  *
+  * Handling conflicts visualised:
+  *
+  * -> StartDeployment (1)          | - cancel conflicting deployments with StopActor
+  *                                 | - mark them as [Canceled] and save the cancellation future
+  *                                 | - save deployment and mark it as [Scheduling]
+  *                                 |
+  *                                 | -> repository.delete(conflicts).onComplete (2)
+  *                                 |     -> repository.store(plan).onComplete
+  *                                 |         <- CancelConflictingDeployments
+  *                                 |
+  * -> CancelConflictingDeployments | -> Future.sequence(cancellations).onComplete (2.5)
+  *                                 |     <- LaunchDeploymentActor
+  * ...                             ˅
+  *
+  * Note: deployment repository serializes operations by the key (deployment id). This allows us to keep store/delete
+  * operations of the dependant deployments in order.
+  */
+// format: ON
 class DeploymentManager(
-  taskTracker: InstanceTracker,
-  killService: KillService,
-  launchQueue: LaunchQueue,
-  scheduler: SchedulerActions,
-  storage: StorageProvider,
-  healthCheckManager: HealthCheckManager,
-  eventBus: EventStream,
-  readinessCheckExecutor: ReadinessCheckExecutor,
-  marathonSchedulerDriverHolder: MarathonSchedulerDriverHolder,
-  deploymentRepository: DeploymentRepository,
-  deploymentActorProps: (ActorRef, ActorRef, SchedulerDriver, KillService, SchedulerActions, DeploymentPlan, InstanceTracker, LaunchQueue, StorageProvider, HealthCheckManager, EventStream, ReadinessCheckExecutor) => Props = DeploymentActor.props)
-    (implicit val mat: Materializer) extends Actor with ActorLogging {
+    taskTracker: InstanceTracker,
+    killService: KillService,
+    launchQueue: LaunchQueue,
+    scheduler: SchedulerActions,
+    storage: StorageProvider,
+    healthCheckManager: HealthCheckManager,
+    eventBus: EventStream,
+    readinessCheckExecutor: ReadinessCheckExecutor,
+    marathonSchedulerDriverHolder: MarathonSchedulerDriverHolder,
+    deploymentRepository: DeploymentRepository,
+    deploymentActorProps: (ActorRef, ActorRef, SchedulerDriver, KillService, SchedulerActions, DeploymentPlan, InstanceTracker, LaunchQueue, StorageProvider, HealthCheckManager, EventStream, ReadinessCheckExecutor) => Props = DeploymentActor.props)(implicit val mat: Materializer) extends Actor with ActorLogging {
   import context.dispatcher
   import mesosphere.marathon.upgrade.DeploymentManager._
 
@@ -64,14 +123,14 @@ class DeploymentManager(
       log.info("Recovering all deployments on leader election")
       val recipient = sender()
       deploymentRepository.all().runWith(Sink.seq).onComplete {
-        case Success(deployments) => recipient ! RecoverDeployments(deployments)
+        case Success(deployments) => recipient ! DeploymentsRecovered(deployments)
         case Failure(t) =>
           log.error(s"Failed to recover deployments from repository: $t")
-          recipient ! RecoverDeployments(Nil)
+          recipient ! DeploymentsRecovered(Nil)
       }
       context.become(started)
     case _ =>
-      // All messages are ignored until master reelection
+    // All messages are ignored until master reelection
   }
 
   def started: Receive = {
@@ -288,6 +347,7 @@ object DeploymentManager {
   case class DeploymentFailed(plan: DeploymentPlan, reason: Throwable)
   case class ReadinessCheckUpdate(deploymentId: String, result: ReadinessCheckResult)
   case class LaunchDeploymentActor(plan: DeploymentPlan, origSender: ActorRef)
+  case object RecoverDeployments
 
   case class DeploymentStepInfo(
       plan: DeploymentPlan,
