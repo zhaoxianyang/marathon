@@ -13,7 +13,8 @@ import mesosphere.marathon.core.plugin.{ PluginDefinition, PluginDefinitions }
 import mesosphere.marathon.core.pod.PodDefinition
 import mesosphere.marathon.core.readiness.ReadinessCheck
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.raml.{ Pod, Raml, Resources }
+import mesosphere.marathon.raml.{ Pod, Raml, Resources, UnreachableInstanceHandling }
+import mesosphere.marathon.state
 import mesosphere.marathon.state._
 import mesosphere.marathon.upgrade.DeploymentManager.DeploymentStepInfo
 import mesosphere.marathon.upgrade._
@@ -985,6 +986,7 @@ trait AppAndGroupFormats {
             dependencies: Set[PathId],
             maybePorts: Option[Seq[Int]],
             upgradeStrategy: Option[UpgradeStrategy],
+            unreachableInstanceHandling: Option[UnreachableInstanceHandling],
             labels: Map[String, String],
             acceptedResourceRoles: Set[String],
             ipAddress: Option[IpAddress],
@@ -1012,6 +1014,7 @@ trait AppAndGroupFormats {
             (__ \ "dependencies").readNullable[Set[PathId]].withDefault(AppDefinition.DefaultDependencies) ~
             (__ \ "ports").readNullable[Seq[Int]](uniquePorts) ~
             (__ \ "upgradeStrategy").readNullable[UpgradeStrategy] ~
+            (__ \ "unreachableInstanceHandling").readNullable[UnreachableInstanceHandling] ~
             (__ \ "labels").readNullable[Map[String, String]].withDefault(AppDefinition.Labels.Default) ~
             (__ \ "acceptedResourceRoles").readNullable[Set[String]](nonEmpty).withDefault(Set.empty[String]) ~
             (__ \ "ipAddress").readNullable[IpAddress] ~
@@ -1064,7 +1067,8 @@ trait AppAndGroupFormats {
             residency = extra.residencyOrDefault,
             readinessChecks = extra.readinessChecks,
             secrets = extra.secrets,
-            taskKillGracePeriod = extra.maybeTaskKillGracePeriod
+            taskKillGracePeriod = extra.maybeTaskKillGracePeriod,
+            unreachableInstanceHandling = extra.unreachableInstanceHandling.fold(state.UnreachableInstanceHandling())(Raml.fromRaml(_))
           )
         }
       }
@@ -1179,7 +1183,8 @@ trait AppAndGroupFormats {
         "version" -> runSpec.version,
         "residency" -> runSpec.residency,
         "secrets" -> runSpec.secrets,
-        "taskKillGracePeriodSeconds" -> runSpec.taskKillGracePeriod
+        "taskKillGracePeriodSeconds" -> runSpec.taskKillGracePeriod,
+        "unreachableInstanceHandling" -> Raml.toRaml(runSpec.unreachableInstanceHandling)
       )
 
       if (runSpec.acceptedResourceRoles.nonEmpty) {

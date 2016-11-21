@@ -13,6 +13,7 @@ import org.scalatest.Matchers
 import play.api.libs.json._
 
 import scala.collection.immutable.Seq
+import scala.concurrent.duration._
 
 class AppDefinitionFormatsTest
     extends MarathonSpec
@@ -441,5 +442,29 @@ class AppDefinitionFormatsTest
     (json \ "secrets" \ "secret1" \ "source").as[String] should equal("/foo")
     (json \ "secrets" \ "secret2" \ "source").as[String] should equal("/foo")
     (json \ "secrets" \ "secret3" \ "source").as[String] should equal("/foo2")
+  }
+
+  test("FromJSON should parse unreachable instance handling") {
+    val appDef = Json.parse(
+      """{
+        |  "id": "test",
+        |  "unreachableInstanceHandling": {
+        |      "timeUntilInactive": 600,
+        |      "timeUntilExpunge": 1200
+        |  }
+        |}""".stripMargin).as[AppDefinition]
+
+    appDef.unreachableInstanceHandling.timeUntilInactive should be(10.minutes)
+    appDef.unreachableInstanceHandling.timeUntilExpunge should be(20.minutes)
+  }
+
+  test("ToJSON should serialize unreachable instance handling") {
+    val handling = UnreachableInstanceHandling(6.minutes, 12.minutes)
+    val appDef = AppDefinition(id = PathId("test"), unreachableInstanceHandling = handling)
+
+    val json = Json.toJson(appDef)
+
+    (json \ "unreachableInstanceHandling" \ "timeUntilInactive").as[Long] should be(360)
+    (json \ "unreachableInstanceHandling" \ "timeUntilExpunge").as[Long] should be(720)
   }
 }

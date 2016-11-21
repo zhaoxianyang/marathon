@@ -79,7 +79,9 @@ case class AppDefinition(
 
   override val residency: Option[Residency] = AppDefinition.DefaultResidency,
 
-  secrets: Map[String, Secret] = AppDefinition.DefaultSecrets) extends RunSpec
+  secrets: Map[String, Secret] = AppDefinition.DefaultSecrets,
+
+  override val unreachableInstanceHandling: UnreachableInstanceHandling = UnreachableInstanceHandling()) extends RunSpec
     with plugin.ApplicationSpec with MarathonState[Protos.ServiceDefinition, AppDefinition] {
 
   import mesosphere.mesos.protos.Implicits._
