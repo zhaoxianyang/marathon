@@ -4,7 +4,7 @@ package core.pod
 // scalastyle:off
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.raml.{ Endpoint, Pod, Raml, Resources }
-import mesosphere.marathon.state.{ AppDefinition, BackoffStrategy, EnvVarValue, MarathonState, PathId, RunSpec, Secret, Timestamp, UpgradeStrategy, VersionInfo }
+import mesosphere.marathon.state._
 import play.api.libs.json.Json
 
 import scala.collection.immutable.Seq
@@ -28,7 +28,8 @@ case class PodDefinition(
     podVolumes: Seq[Volume] = PodDefinition.DefaultVolumes,
     networks: Seq[Network] = PodDefinition.DefaultNetworks,
     backoffStrategy: BackoffStrategy = PodDefinition.DefaultBackoffStrategy,
-    upgradeStrategy: UpgradeStrategy = PodDefinition.DefaultUpgradeStrategy
+    upgradeStrategy: UpgradeStrategy = PodDefinition.DefaultUpgradeStrategy,
+    override val unreachableInstanceHandling: UnreachableInstanceHandling = PodDefinition.DefaultUnreachableInstanceHandling
 ) extends RunSpec with plugin.PodSpec with MarathonState[Protos.Json, PodDefinition] {
 
   val endpoints: Seq[Endpoint] = containers.flatMap(_.endpoints)
@@ -116,4 +117,5 @@ object PodDefinition {
   val DefaultNetworks = Seq.empty[Network]
   val DefaultBackoffStrategy = BackoffStrategy()
   val DefaultUpgradeStrategy = AppDefinition.DefaultUpgradeStrategy
+  val DefaultUnreachableInstanceHandling = UnreachableInstanceHandling()
 }
