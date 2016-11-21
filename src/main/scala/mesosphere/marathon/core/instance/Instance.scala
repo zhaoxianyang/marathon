@@ -9,7 +9,8 @@ import mesosphere.marathon.core.instance.Instance.InstanceState
 import mesosphere.marathon.core.instance.update.{ InstanceChangedEventsGenerator, InstanceUpdateEffect, InstanceUpdateOperation }
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.core.task.update.{ TaskUpdateEffect, TaskUpdateOperation }
-import mesosphere.marathon.state.{ MarathonState, PathId, Timestamp }
+import mesosphere.marathon.raml.Raml
+import mesosphere.marathon.state.{ MarathonState, PathId, Timestamp, UnreachableInstanceHandling }
 import mesosphere.marathon.stream._
 import mesosphere.mesos.Placed
 import org.apache._
@@ -29,7 +30,8 @@ case class Instance(
     agentInfo: Instance.AgentInfo,
     state: InstanceState,
     tasksMap: Map[Task.Id, Task],
-    runSpecVersion: Timestamp) extends MarathonState[Protos.Json, Instance] with Placed {
+    runSpecVersion: Timestamp,
+    unreachableInstanceHandling: UnreachableInstanceHandling = UnreachableInstanceHandling()) extends MarathonState[Protos.Json, Instance] with Placed {
 
   val runSpecId: PathId = instanceId.runSpecId
   val isLaunched: Boolean = tasksMap.nonEmpty && tasksMap.valuesIterator.forall(task => task.launched.isDefined)
@@ -166,7 +168,7 @@ case class Instance(
 
   private[instance] def updatedInstance(updatedTask: Task, now: Timestamp): Instance = {
     val updatedTasks = tasksMap.updated(updatedTask.taskId, updatedTask)
-    copy(tasksMap = updatedTasks, state = Instance.InstanceState(Some(state), updatedTasks, now))
+    copy(tasksMap = updatedTasks, state = Instance.InstanceState(Some(state), updatedTasks, now, unreachableInstanceHandling.timeUntilInactive))
   }
 }
 
@@ -398,6 +400,17 @@ object Instance {
       JsString(Base64.getEncoder.encodeToString(o.toByteArray))
     }
   }
+
+  implicit object UreachableInstanceHandlingFormat extends Format[UnreachableInstanceHandling] {
+    override def reads(json: JsValue): JsResult[UnreachableInstanceHandling] = {
+      json.validate[raml.UnreachableInstanceHandling].map(Raml.fromRaml(_))
+    }
+
+    override def writes(o: UnreachableInstanceHandling): JsValue = {
+      Json.toJson(Raml.toRaml(o))
+    }
+  }
+
   implicit val agentFormat: Format[AgentInfo] = Json.format[AgentInfo]
   implicit val idFormat: Format[Instance.Id] = Json.format[Instance.Id]
   implicit val instanceConditionFormat: Format[Condition] = Json.format[Condition]
