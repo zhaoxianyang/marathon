@@ -20,7 +20,7 @@ trait ConstraintConversion {
 
   implicit val appConstraintRamlReader: Reads[Seq[String], Protos.Constraint] = Reads { raw =>
     // this is not a substite for validation, but does ensure that we're not translating invalid operators
-    def validOperator(op: String): Boolean = ConstraintConversion.validOperators.contains(op)
+    def validOperator(op: String): Boolean = ConstraintConversion.ValidOperators.contains(op)
     val result: Protos.Constraint = (raw.lift(0), raw.lift(1), raw.lift(2)) match {
       case (Some(field), Some(op), None) if validOperator(op) =>
         Protos.Constraint.newBuilder()
@@ -60,5 +60,5 @@ trait ConstraintConversion {
 }
 
 object ConstraintConversion extends ConstraintConversion {
-  val validOperators: Set[String] = Protos.Constraint.Operator.values().map(_.toString)(collection.breakOut)
+  val ValidOperators: Set[String] = Protos.Constraint.Operator.values().map(_.toString)(collection.breakOut)
 }

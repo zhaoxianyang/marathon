@@ -11,7 +11,7 @@ import mesosphere.marathon.state.ResourceRole
 
 import scala.util.Try
 
-trait SchedulingValidator {
+trait SchedulingValidation {
   import Validation._
 
   val backoffStrategyValidator = validator[PodSchedulingBackoffStrategy] { bs =>
@@ -91,4 +91,4 @@ trait SchedulingValidator {
   }
 }
 
-object SchedulingValidator extends SchedulingValidator
+object SchedulingValidation extends SchedulingValidation

@@ -216,6 +216,7 @@ types:
       ipAddress?:
         type: network.IpAddress
         description: deprecated in favor of App.networks
+        (pragma.deprecated): Replaced with App.networks
       networks?:
         type: array
         items: network.Network
@@ -272,6 +273,7 @@ types:
       uris?:
         type: array
         (pragma.forceOptional):
+        (pragma.deprecated): Replaced with fetch
         items:
           type: strings.Uri
         description: |

@@ -6,6 +6,7 @@ import java.net._
 import com.wix.accord._
 import com.wix.accord.ViolationBuilder._
 import mesosphere.marathon.state.FetchUri
+import mesosphere.marathon.stream._
 import org.slf4j.LoggerFactory
 import play.api.libs.json._
 
@@ -14,42 +15,15 @@ import scala.util.Try
 import scala.util.matching.Regex
 
 // TODO(jdef) move this into package "validation"
-object Validation {
-
-  /*
-  sealed trait Alias
-  case object Anonymous extends Alias
-  case class Named(name: String) extends Alias
-
-  implicit class StringName(name: String) {
-    def toAlias: Alias = Named(name)
-  }
-  */
-
+trait Validation {
   def validateOrThrow[T](t: T)(implicit validator: Validator[T]): T = validate(t) match {
     case Success => t
     case f: Failure => throw ValidationFailedException(t, f)
   }
 
-  implicit def optional[T](implicit validator: Validator[T] /*, alias: Alias = Anonymous*/ ): Validator[Option[T]] = {
+  implicit def optional[T](implicit validator: Validator[T]): Validator[Option[T]] = {
     new Validator[Option[T]] {
       override def apply(option: Option[T]): Result = option.map(validator).getOrElse(Success)
-      /*
-      override def apply(option: Option[T]): Result = option.map { t =>
-        validator(t) match {
-          case Success => Success
-          case f: Failure =>
-            alias match {
-              case Anonymous => f
-              case Named(name) =>
-                Failure(f.violations.map {
-                  case g: GroupViolation => g.copy(description = Some(name))
-                  case r: RuleViolation => r.copy(description = Some(name))
-                })
-            }
-        }
-      }.getOrElse(Success)
-      */
     }
   }
 
@@ -233,7 +207,7 @@ object Validation {
     errorMessage: String = "Elements must be unique.",
     filter: B => Boolean = { _: B => true }): Validator[Iterable[A]] = {
     new Validator[Iterable[A]] {
-      def apply(seq: Iterable[A]) = areUnique(seq.map(fn).filter(filter).to[Seq], errorMessage)
+      def apply(seq: Iterable[A]) = areUnique(seq.map(fn).filterAs(filter)(collection.breakOut), errorMessage)
     }
   }
 
@@ -242,7 +216,7 @@ object Validation {
     errorMessage: String = "Elements must be unique.",
     filter: B => Boolean = { _: B => true }): Validator[Iterable[A]] = {
     new Validator[Iterable[A]] {
-      def apply(seq: Iterable[A]) = areUnique(seq.flatMap(fn).filter(filter).to[Seq], errorMessage)
+      def apply(seq: Iterable[A]) = areUnique(seq.flatMap(fn).filterAs(filter)(collection.breakOut), errorMessage)
     }
   }
 
@@ -329,3 +303,5 @@ object Validation {
       failure = _ -> failureMessage
     )
 }
+
+object Validation extends Validation

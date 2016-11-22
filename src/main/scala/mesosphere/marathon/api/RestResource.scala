@@ -4,6 +4,7 @@ import java.net.URI
 import javax.ws.rs.core.Response
 import javax.ws.rs.core.Response.{ ResponseBuilder, Status }
 
+import akka.http.scaladsl.model.StatusCodes
 import com.wix.accord._
 import mesosphere.marathon.{ MarathonConf, ValidationFailedException }
 import mesosphere.marathon.api.v2.Validation._
@@ -70,7 +71,7 @@ trait RestResource {
     validator(t) match {
       case f: Failure =>
         val entity = Json.toJson(description.map(f.withDescription).getOrElse(f)).toString
-        Response.status(422).entity(entity).build()
+        Response.status(StatusCodes.UnprocessableEntity.intValue).entity(entity).build()
       case Success => fn(t)
     }
   }
@@ -81,7 +82,7 @@ trait RestResource {
     } catch {
       case vfe: ValidationFailedException =>
         val entity = Json.toJson(vfe.failure).toString
-        Response.status(422).entity(entity).build()
+        Response.status(StatusCodes.UnprocessableEntity.intValue).entity(entity).build()
     }
 }
 

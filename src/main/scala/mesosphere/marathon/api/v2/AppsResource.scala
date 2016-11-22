@@ -11,7 +11,6 @@ import akka.event.EventStream
 import com.codahale.metrics.annotation.Timed
 import mesosphere.marathon.api.v2.Validation._
 import mesosphere.marathon.api.v2.validation.AppValidation
-import mesosphere.marathon.api.v2.json.AppUpdateHelper._
 import mesosphere.marathon.api.v2.json.Formats._
 import mesosphere.marathon.api.{ AuthResource, MarathonMediaType, RestResource }
 import mesosphere.marathon.core.appinfo.{ AppInfo, AppInfoService, AppSelector, Selector, TaskCounts }
@@ -20,7 +19,7 @@ import mesosphere.marathon.core.event.ApiPostEvent
 import mesosphere.marathon.core.group.GroupManager
 import mesosphere.marathon.core.plugin.PluginManager
 import mesosphere.marathon.plugin.auth._
-import mesosphere.marathon.raml.Raml
+import mesosphere.marathon.raml.{ AppConversion, Raml }
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state._
 import mesosphere.marathon.stream._
@@ -48,7 +47,7 @@ class AppsResource @Inject() (
   implicit lazy val validateCanonicalAppUpdateAPI = AppValidation.validateCanonicalAppUpdateAPI(config.availableFeatures)
 
   val normalizationConfig = AppNormalization.Config(config.defaultNetworkName.get)
-  val preprocessApp: (raml.App => raml.App) = AppsResource.preprocessor(config.availableFeatures, normalizationConfig)
+  def preprocessApp(app: raml.App): raml.App = AppsResource.preprocessor(config.availableFeatures, normalizationConfig)(app)
 
   def preprocess(app: raml.AppUpdate): raml.AppUpdate = {
     validateOrThrow(app)(AppValidation.validateOldAppUpdateAPI)
@@ -311,4 +310,21 @@ object AppsResource {
   def authzSelector(implicit authz: Authorizer, identity: Identity): AppSelector = Selector[AppDefinition] { app =>
     authz.isAuthorized(identity, ViewRunSpec, app)
   }
+
+  def withoutPriorAppDefinition(update: raml.AppUpdate, appId: PathId): AppDefinition = {
+    val selectedStrategy = AppConversion.ResidencyAndUpgradeStrategy(
+      residency = update.residency.map(Raml.fromRaml(_)),
+      upgradeStrategy = update.upgradeStrategy.map(Raml.fromRaml(_)),
+      hasPersistentVolumes = update.container.exists(_.volumes.exists(_.persistent.nonEmpty)),
+      hasExternalVolumes = update.container.exists(_.volumes.exists(_.external.nonEmpty))
+    )
+    val template = AppDefinition(
+      appId, residency = selectedStrategy.residency, upgradeStrategy = selectedStrategy.upgradeStrategy)
+    Raml.fromRaml(update -> template)
+  }
+
+  def withCanonizedIds(update: raml.AppUpdate, base: PathId = PathId.empty): raml.AppUpdate = update.copy(
+    id = update.id.map(id => PathId(id).canonicalPath(base).toString),
+    dependencies = update.dependencies.map(_.map(dep => PathId(dep).canonicalPath(base).toString))
+  )
 }

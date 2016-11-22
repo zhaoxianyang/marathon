@@ -21,7 +21,7 @@ trait PodsValidation {
   import NameValidation._
   import NetworkValidation._
   import SecretValidation._
-  import SchedulingValidator._
+  import SchedulingValidation._
 
   val resourceValidator = validator[Resources] { resource =>
     resource.cpus should be >= 0.0

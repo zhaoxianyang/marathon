@@ -4,7 +4,6 @@ package api.v2
 import com.wix.accord._
 import com.wix.accord.dsl._
 import mesosphere.marathon.api.v2.Validation._
-import mesosphere.marathon.api.v2.json.GroupUpdateHelper
 import mesosphere.marathon.raml.GroupUpdate
 import mesosphere.marathon.state.Container._
 import mesosphere.marathon.state.PathId._
@@ -24,7 +23,7 @@ class ModelValidationTest
 
   import ModelValidationTest._
 
-  implicit val groupUpdateValidator = GroupUpdateHelper.groupUpdateValid(Set.empty[String])
+  implicit val groupUpdateValidator = Group.groupUpdateValid(Set.empty[String])
 
   test("A group update should pass validation") {
     val update = GroupUpdate(id = Some("/a/b/c"))

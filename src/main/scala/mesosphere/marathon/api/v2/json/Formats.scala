@@ -12,7 +12,7 @@ import mesosphere.marathon.core.instance.Instance
 import mesosphere.marathon.core.plugin.{ PluginDefinition, PluginDefinitions }
 import mesosphere.marathon.core.pod.PodDefinition
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.raml.{ Pod, Raml }
+import mesosphere.marathon.raml.{ App, Pod, Raml }
 import mesosphere.marathon.state._
 import mesosphere.marathon.upgrade.DeploymentManager.DeploymentStepInfo
 import mesosphere.marathon.upgrade._
@@ -104,7 +104,7 @@ trait Formats
     (
       (__ \ "ipAddress").format[String] ~
       (__ \ "protocol").format[mesos.NetworkInfo.Protocol]
-    ) (toIpAddress, toTuple)
+    )(toIpAddress, toTuple)
   }
 
   implicit lazy val InstanceIdWrite: Writes[Instance.Id] = Writes { id => JsString(id.idString) }
@@ -814,75 +814,8 @@ trait AppAndGroupFormats {
 
   implicit lazy val RunSpecWrites: Writes[RunSpec] = {
     Writes[RunSpec] {
-      case app: AppDefinition => AppDefWrites.writes(app)
+      case app: AppDefinition => Json.toJson(Raml.toRaml(app))
       case pod: PodDefinition => Json.toJson(Raml.toRaml(pod))
-    }
-  }
-
-  implicit lazy val AppDefWrites: Writes[AppDefinition] = {
-    implicit lazy val durationWrites = Writes[FiniteDuration] { d =>
-      JsNumber(d.toSeconds)
-    }
-
-    Writes[AppDefinition] { runSpec =>
-      var appJson: JsObject = Json.obj(
-        "id" -> runSpec.id.toString,
-        "cmd" -> runSpec.cmd,
-        "args" -> (if (runSpec.args.isEmpty) JsNull else runSpec.args),
-        "user" -> runSpec.user,
-        "env" -> runSpec.env,
-        "instances" -> runSpec.instances,
-        "cpus" -> runSpec.resources.cpus,
-        "mem" -> runSpec.resources.mem,
-        "disk" -> runSpec.resources.disk,
-        "gpus" -> runSpec.resources.gpus,
-        "executor" -> runSpec.executor,
-        "constraints" -> runSpec.constraints,
-        "fetch" -> runSpec.fetch,
-        "storeUrls" -> runSpec.storeUrls,
-        "backoffSeconds" -> runSpec.backoffStrategy.backoff,
-        "backoffFactor" -> runSpec.backoffStrategy.factor,
-        "maxLaunchDelaySeconds" -> runSpec.backoffStrategy.maxLaunchDelay,
-        "container" -> runSpec.container,
-        "healthChecks" -> runSpec.healthChecks,
-        "readinessChecks" -> runSpec.readinessChecks,
-        "dependencies" -> runSpec.dependencies,
-        "upgradeStrategy" -> runSpec.upgradeStrategy,
-        "labels" -> runSpec.labels,
-        "networks" -> runSpec.networks.map(Raml.toRaml(_)),
-        "version" -> runSpec.version,
-        "residency" -> runSpec.residency,
-        "secrets" -> runSpec.secrets,
-        "taskKillGracePeriodSeconds" -> runSpec.taskKillGracePeriod,
-        "unreachableStrategy" -> Raml.toRaml(runSpec.unreachableStrategy)
-      )
-
-      if (runSpec.acceptedResourceRoles.nonEmpty) {
-        appJson = appJson + ("acceptedResourceRoles" -> Json.toJson(runSpec.acceptedResourceRoles))
-      }
-
-      // top-level ports fields are incompatible with IP/CT
-      if (!runSpec.usesNonHostNetworking) {
-        appJson = appJson ++ Json.obj(
-          "portDefinitions" -> {
-            if (runSpec.servicePorts.nonEmpty) {
-              // zip with defaults here to avoid the possibility of generating invalid JSON,
-              // for example where ports=[0] but portDefinition=[]
-              runSpec.portDefinitions.zipAll(runSpec.servicePorts, PortDefinition(0), 0).map {
-                case (portDefinition, servicePort) => portDefinition.copy(port = servicePort)
-              }
-            } else {
-              runSpec.portDefinitions
-            }
-          },
-          // requirePorts only makes sense when allocating hostPorts, which you can't do in IP/CT mode
-          "requirePorts" -> runSpec.requirePorts
-        )
-      }
-      Json.toJson(runSpec.versionInfo) match {
-        case JsNull => appJson
-        case v: JsValue => appJson + ("versionInfo" -> v)
-      }
     }
   }
 
@@ -988,19 +921,19 @@ trait AppAndGroupFormats {
 
   implicit lazy val GroupFormatWrites: Writes[Group] = (
     (__ \ "id").write[PathId] ~
-    (__ \ "apps").writeNullable[Iterable[AppDefinition]] ~
-    (__ \ "pods").writeNullable[Iterable[Pod]] ~
-    (__ \ "groups").lazyWriteNullable(implicitly[Writes[Iterable[Group]]]) ~
-    (__ \ "dependencies").writeNullable[Set[PathId]] ~
-    (__ \ "version").writeNullable[Timestamp]
+    (__ \ "apps").write[Iterable[App]] ~
+    (__ \ "pods").write[Iterable[Pod]] ~
+    (__ \ "groups").lazyWrite(implicitly[Writes[Iterable[Group]]]) ~
+    (__ \ "dependencies").write[Set[PathId]] ~
+    (__ \ "version").write[Timestamp]
   ) ({ (g: Group) =>
       (
         g.id,
-        if (g.apps.values.isEmpty) None else Some(g.apps.values),
-        { val pods = g.pods.values.map(Raml.toRaml(_)); if (pods.isEmpty) None else Some(pods) },
-        if (g.groupsById.isEmpty) None else Some(g.groupsById.values),
-        if (g.dependencies.isEmpty) None else Some(g.dependencies),
-        Some(g.version)
+        g.apps.values.map(Raml.toRaml(_)),
+        g.pods.values.map(Raml.toRaml(_)),
+        g.groupsById.values,
+        g.dependencies,
+        g.version
       )
     })
 

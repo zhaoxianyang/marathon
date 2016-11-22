@@ -19,7 +19,7 @@ object ContainerSerializer {
       val pms = proto.getPortMappingsList
       Container.Mesos(
         volumes = proto.getVolumesList.map(Volume(_))(collection.breakOut),
-        portMappings = if (pms.nonEmpty) pms.map(PortMappingSerializer.fromProto).to[Seq] else Nil
+        portMappings = if (pms.nonEmpty) pms.map(PortMappingSerializer.fromProto)(collection.breakOut) else Nil
       )
     }
   }
@@ -71,7 +71,17 @@ object ContainerSerializer {
       case dv: DockerVolume => builder.addVolumes(VolumeSerializer.toMesos(dv))
     }
 
-    // TODO(jdef) support port-mappings all container types, not just docker-docker
+    val networkInfos = container.portMappings.map { mapping =>
+      val labels = mapping.labels.map { case (k, v) => mesos.Protos.Label.newBuilder.setKey(k).setValue(v).build() }
+      val builder = mesos.Protos.NetworkInfo.newBuilder
+      builder.setLabels(mesos.Protos.Labels.newBuilder().addAllLabels(labels).build())
+      val portBuilder = builder.addPortMappingsBuilder().setContainerPort(mapping.containerPort)
+        .setProtocol(mapping.protocol)
+      mapping.hostPort.foreach(portBuilder.setHostPort)
+      builder.build()
+    }
+    builder.addAllNetworkInfos(networkInfos)
+
     builder.build
   }
 }
@@ -153,7 +163,7 @@ object DockerSerializer {
     Container.Docker(
       volumes = proto.getVolumesList.map(Volume(_))(collection.breakOut),
       image = d.getImage,
-      portMappings = if (pms.nonEmpty) pms.map(PortMappingSerializer.fromProto).to[Seq] else Nil,
+      portMappings = if (pms.nonEmpty) pms.map(PortMappingSerializer.fromProto)(collection.breakOut) else Nil,
       privileged = d.getPrivileged,
       parameters = d.getParametersList.map(Parameter(_))(collection.breakOut),
       forcePullImage = if (d.hasForcePullImage) d.getForcePullImage else false

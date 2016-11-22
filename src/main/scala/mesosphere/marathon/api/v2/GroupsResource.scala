@@ -10,7 +10,6 @@ import javax.ws.rs.core.{ Context, Response }
 import com.codahale.metrics.annotation.Timed
 import mesosphere.marathon.api.v2.InfoEmbedResolver._
 import mesosphere.marathon.api.v2.json.Formats._
-import mesosphere.marathon.api.v2.json.GroupUpdateHelper
 import mesosphere.marathon.api.{ AuthResource, MarathonMediaType }
 import mesosphere.marathon.core.appinfo.{ GroupInfo, GroupInfoService, Selector }
 import mesosphere.marathon.core.group.GroupManager
@@ -52,23 +51,6 @@ class GroupsResource @Inject() (
   val ListRootVersionRE = """^versions$""".r
   val GetVersionRE = """^(.+)/versions/(.+)$""".r
   val GetRootVersionRE = """^versions/(.+)$""".r
-
-  /*
-  implicit lazy val GroupFormat: Format[Group] = (
-    (__ \ "id").format[PathId] ~
-    (__ \ "apps").formatNullable[Iterable[AppDefinition]].withDefault(Iterable.empty) ~
-    (__ \ "pods").formatNullable[Iterable[Pod]].withDefault(Iterable.empty) ~
-    (__ \ "groups").lazyFormatNullable(implicitly[Format[Iterable[Group]]]).withDefault(Iterable.empty) ~
-    (__ \ "dependencies").formatNullable[Set[PathId]].withDefault(Group.defaultDependencies) ~
-    (__ \ "version").formatNullable[Timestamp].withDefault(Group.defaultVersion)
-  ) (
-      (id, apps, pods, groups, dependencies, version) =>
-        Group(id = id, apps = apps.map(app => app.id -> app)(collection.breakOut),
-          pods.map(p => PathId(p.id).canonicalPath() -> Raml.fromRaml(p))(collection.breakOut),
-          groupsById = groups.map(group => group.id -> group)(collection.breakOut),
-          dependencies = dependencies, version = version),
-      { (g: Group) => (g.id, g.apps.values, g.pods.values.map(Raml.toRaml(_)), g.groups, g.dependencies, g.version) })
-  */
 
   /**
     * Get root group.
@@ -191,7 +173,7 @@ class GroupsResource @Inject() (
 
       val (deployment, path) = updateOrCreate(id.toRootPath, groupUpdate, force)
       deploymentResult(deployment, Response.created(new URI(path.toString)))
-    }(GroupUpdateHelper.validNestedGroupUpdateWithBase(id.toRootPath, config.availableFeatures))
+    }(Group.validNestedGroupUpdateWithBase(id.toRootPath, config.availableFeatures))
   }
 
   @PUT
@@ -241,7 +223,7 @@ class GroupsResource @Inject() (
         val (deployment, _) = updateOrCreate(id.toRootPath, groupUpdate, force)
         deploymentResult(deployment)
       }
-    }(GroupUpdateHelper.validNestedGroupUpdateWithBase(id.toRootPath, config.availableFeatures))
+    }(Group.validNestedGroupUpdateWithBase(id.toRootPath, config.availableFeatures))
   }
 
   @DELETE

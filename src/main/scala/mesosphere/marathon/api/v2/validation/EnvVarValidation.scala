@@ -3,12 +3,10 @@ package api.v2.validation
 
 import com.wix.accord._
 import com.wix.accord.dsl._
-import mesosphere.marathon.api.v2.Validation
 import mesosphere.marathon.raml.{ EnvVarSecretRef, EnvVarValueOrSecret, SecretDef }
 
 trait EnvVarValidation {
-  import Validation._
-  import SecretValidation._
+  import mesosphere.marathon.api.v2.Validation._
 
   val EnvVarNamePattern = """^[a-zA-Z_][a-zA-Z0-9_]*$""".r
 
@@ -30,10 +28,7 @@ trait EnvVarValidation {
         case _ => false
       } == 0
     else true
-  } and every(secretRefValidator(secrets)) and isTrue("duplicate keys (case insensitive) are not allowed"){ (env: Map[String, EnvVarValueOrSecret]) =>
-    val keys: Seq[String] = env.keySet.map(_.toUpperCase)(collection.breakOut)
-    keys.distinct.size == keys.size
-  }
+  } and every(SecretValidation.secretRefValidator(secrets))
 }
 
 object EnvVarValidation extends EnvVarValidation

@@ -5,7 +5,7 @@ import com.wix.accord._
 import mesosphere.Unstable
 import mesosphere.marathon.api.JsonTestHelper
 import mesosphere.marathon.api.v2.Validation.validateOrThrow
-import mesosphere.marathon.api.v2.{ AppNormalization, ValidationHelper }
+import mesosphere.marathon.api.v2.{ AppNormalization, AppsResource, ValidationHelper }
 import mesosphere.marathon.api.v2.validation.AppValidation
 import mesosphere.marathon.core.readiness.ReadinessCheckTestHelper
 import mesosphere.marathon.raml.{ AppCContainer, AppUpdate, Artifact, Container, ContainerPortMapping, DockerContainer, EngineType, Environment, Network, NetworkMode, PortDefinition, PortDefinitions, Raml, SecretDef, UpgradeStrategy }
@@ -332,7 +332,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val strategy = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
+    val strategy = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
     assert(strategy.minimumHealthCapacity == 0.5
       && strategy.maximumOverCapacity == 0)
   }
@@ -361,7 +361,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val residency = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).residency
+    val residency = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).residency
     assert(residency.contains(Residency.defaultResidency))
   }
 
@@ -389,7 +389,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val strategy = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
+    val strategy = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
     assert(strategy.minimumHealthCapacity == 0.5
       && strategy.maximumOverCapacity == 0)
   }
@@ -423,7 +423,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val createdViaUpdate = AppUpdateHelper.withoutPriorAppDefinition(update, "/put-path-id".toPath)
+    val createdViaUpdate = AppsResource.withoutPriorAppDefinition(update, "/put-path-id".toPath)
     assert(update.container.isDefined)
     assert(createdViaUpdate.container.contains(state.Container.Docker(
       volumes = Seq(PersistentVolume("data", PersistentVolumeInfo(size = 100), mode = Mesos.Volume.Mode.RW)),
@@ -460,7 +460,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val create = AppUpdateHelper.withoutPriorAppDefinition(update, "/app".toPath)
+    val create = AppsResource.withoutPriorAppDefinition(update, "/app".toPath)
     assert(update.residency.isDefined)
     assert(update.residency.map(Raml.fromRaml(_)) == create.residency)
   }
@@ -498,7 +498,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val create = AppUpdateHelper.withoutPriorAppDefinition(update, "/app".toPath)
+    val create = AppsResource.withoutPriorAppDefinition(update, "/app".toPath)
     assert(update.upgradeStrategy.isDefined)
     assert(update.upgradeStrategy.map(Raml.fromRaml(_)).contains(create.upgradeStrategy))
   }
@@ -527,7 +527,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val residency = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).residency
+    val residency = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).residency
     assert(residency.contains(Residency.defaultResidency))
   }
 
@@ -553,7 +553,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val strategy = AppUpdateHelper.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
+    val strategy = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
     assert(strategy == state.UpgradeStrategy.forResidentTasks)
   }
 

@@ -3,9 +3,8 @@ package integration
 
 import mesosphere.{ AkkaIntegrationFunTest, Unstable }
 import mesosphere.marathon.integration.setup.{ EmbeddedMarathonTest, IntegrationHealthCheck, WaitTestSupport }
-import mesosphere.marathon.api.v2.json.GroupUpdateHelper
 import mesosphere.marathon.raml.{ App, GroupUpdate, UpgradeStrategy }
-import mesosphere.marathon.state.PathId
+import mesosphere.marathon.state.{ Group, PathId }
 import org.apache.http.HttpStatus
 import spray.http.DateTime
 
@@ -19,7 +18,7 @@ class GroupDeployIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMar
 
   test("create empty group successfully") {
     Given("A group which does not exist in marathon")
-    val group = GroupUpdateHelper.empty("test".toRootTestPath)
+    val group = Group.emptyUpdate("test".toRootTestPath)
 
     When("The group gets created")
     val result = marathon.createGroup(group)
@@ -32,7 +31,7 @@ class GroupDeployIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMar
   test("update empty group successfully") {
     Given("An existing group")
     val name = "test2".toRootTestPath
-    val group = GroupUpdateHelper.empty(name)
+    val group = Group.emptyUpdate(name)
     val dependencies = Set("/test".toTestPath)
     waitForDeployment(marathon.createGroup(group))
 
@@ -47,7 +46,7 @@ class GroupDeployIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMar
 
   test("deleting an existing group gives a 200 http response") {
     Given("An existing group")
-    val group = GroupUpdateHelper.empty("test3".toRootTestPath)
+    val group = Group.emptyUpdate("test3".toRootTestPath)
     waitForDeployment(marathon.createGroup(group))
 
     When("The group gets deleted")

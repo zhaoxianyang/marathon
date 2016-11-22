@@ -107,10 +107,6 @@ trait AppNormalization {
     }
   }
 
-  def normalizeEnvironment(env: Map[String, EnvVarValueOrSecret]): Map[String, EnvVarValueOrSecret] = env.map {
-    case (k, v) => k.toUpperCase -> v
-  }
-
   /**
     * only deprecated fields and their interaction with canonical fields have been validated so far,
     * so we limit normalization here to translating from the deprecated API to the canonical one.
@@ -152,7 +148,7 @@ trait AppNormalization {
       ports = None,
       // health checks
       healthChecks = update.healthChecks.map(normalizeHealthChecks),
-      env = update.env.map(normalizeEnvironment)
+      env = update.env
     )
   }
 
@@ -241,7 +237,7 @@ trait AppNormalization {
       healthChecks = healthChecks,
       // residency
       residency = residency,
-      env = normalizeEnvironment(app.env)
+      env = app.env
     )
   }
 

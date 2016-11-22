@@ -3,6 +3,7 @@ uses:
   label: label.raml
   numbers: numberTypes.raml
   strings: stringTypes.raml
+  pragma: pragma.raml
 types:
   Endpoint:
     type: object
@@ -87,6 +88,7 @@ types:
           Array of objects describing the ports exposed by each task
   IpAddress:
     type: object
+    (pragma.deprecated): Experimental API that is now deprecated. Prefer portMappings
     description: |
       If an application definition includes the 'ipAddress' field, then Marathon
       will request a per-task IP from Mesos.
@@ -100,6 +102,7 @@ types:
           One IP address can belong to zero or more network groups.
           The idea is that containers can only reach containers with which they
           share at least one network group.
+          *Ignored by Marathon*
         items: string
         uniqueItems: true
       labels?: label.KVLabels

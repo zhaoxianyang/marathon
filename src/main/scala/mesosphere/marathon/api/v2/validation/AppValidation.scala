@@ -18,7 +18,7 @@ trait AppValidation {
   import EnvVarValidation._
   import NetworkValidation._
   import SecretValidation._
-  import SchedulingValidator._
+  import SchedulingValidation._
 
   val validPortNumber = validator[Int] { port =>
     port should be >= 0 and be <= 65535
