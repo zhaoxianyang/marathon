@@ -1,10 +1,12 @@
 package mesosphere.marathon
 package integration
 
-import mesosphere.Unstable
 import mesosphere.AkkaIntegrationFunTest
 import mesosphere.marathon.integration.facades.ITEnrichedTask
 import mesosphere.marathon.integration.setup._
+import mesosphere.marathon.state.UnreachableInstanceHandling
+
+import scala.concurrent.duration._
 
 @IntegrationTest
 @UnstableTest
@@ -28,13 +30,11 @@ class TaskUnreachableIntegrationTest extends AkkaIntegrationFunTest with Embedde
     mesosCluster.agents(1).stop()
   }
 
-  // The test will timeout because timeUntilInactive is too long and timeUntilExpunge is too short.
-  // Should work once we have https://mesosphere.atlassian.net/browse/MARATHON-1228 and
-  // https://mesosphere.atlassian.net/browse/MARATHON-1227
-  // Set timeUntilInactive to 1.seconds and timeUntilExpunge to 5 minutes.
-  test("A task unreachable update will trigger a replacement task", Unstable) {
-    Given("a new app")
+  test("A task unreachable update will trigger a replacement task") {
+    Given("a new app with proper timeouts")
+    val handling = UnreachableInstanceHandling(1.minutes, 5.minutes)
     val app = appProxy(testBasePath / "app", "v1", instances = 1, withHealth = false)
+      .copy(unreachableInstanceHandling = handling)
     marathon.createAppV2(app)
     waitForEvent("deployment_success")
     val task = waitForTasks(app.id, 1).head
