@@ -348,8 +348,8 @@ trait AppValidation {
     PathId(app.id) as "id" is PathId.validPathWithBase(base)
   } and validBasicAppDefinition(enabledFeatures)
 
-  /** should be kept in sync with [[AppDefinition.portIndices]] */
   def portIndices(app: App): Range = {
+    // should be kept in sync with AppDefinition.portIndices
     app.container.withFilter(_.portMappings.nonEmpty)
       .map(_.portMappings).orElse(app.portDefinitions).getOrElse(Nil).indices
   }
