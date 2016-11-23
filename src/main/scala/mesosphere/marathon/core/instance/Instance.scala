@@ -9,7 +9,6 @@ import mesosphere.marathon.core.instance.Instance.InstanceState
 import mesosphere.marathon.core.instance.update.{ InstanceChangedEventsGenerator, InstanceUpdateEffect, InstanceUpdateOperation }
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.core.task.update.{ TaskUpdateEffect, TaskUpdateOperation }
-import mesosphere.marathon.raml.Raml
 import mesosphere.marathon.state.{ MarathonState, PathId, Timestamp, UnreachableStrategy }
 import mesosphere.marathon.stream._
 import mesosphere.mesos.Placed
@@ -404,16 +403,17 @@ object Instance {
     }
   }
 
-  implicit object UreachableInstanceHandlingFormat extends Format[UnreachableStrategy] {
-    override def reads(json: JsValue): JsResult[UnreachableStrategy] = {
-      json.validate[raml.UnreachableStrategy].map(Raml.fromRaml(_))
+  implicit object FiniteDurationFormat extends Format[FiniteDuration] {
+    override def reads(json: JsValue): JsResult[FiniteDuration] = {
+      json.validate[Long].map(_.seconds)
     }
 
-    override def writes(o: UnreachableStrategy): JsValue = {
-      Json.toJson(Raml.toRaml(o))
+    override def writes(o: FiniteDuration): JsValue = {
+      Json.toJson(o.toSeconds)
     }
   }
 
+  implicit val unreachableStrategyFormat = Json.format[UnreachableStrategy]
   implicit val agentFormat: Format[AgentInfo] = Json.format[AgentInfo]
   implicit val idFormat: Format[Instance.Id] = Json.format[Instance.Id]
   implicit val instanceConditionFormat: Format[Condition] = Json.format[Condition]
