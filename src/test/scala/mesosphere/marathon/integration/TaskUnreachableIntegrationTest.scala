@@ -12,6 +12,9 @@ import scala.concurrent.duration._
 @UnstableTest
 class TaskUnreachableIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMarathonMesosClusterTest {
 
+  override lazy val mesosNumMasters = 2
+  override lazy val mesosNumSlaves = 2
+
   override val marathonArgs: Map[String, String] = Map(
     "reconciliation_initial_delay" -> "5000",
     "reconciliation_interval" -> "5000",
@@ -23,11 +26,20 @@ class TaskUnreachableIntegrationTest extends AkkaIntegrationFunTest with Embedde
     "task_lost_expunge_interval" -> "1000"
   )
 
-  after {
-    cleanUp()
-    // Ensure that only slave1 is running
-    mesosCluster.agents(0).start()
+  before {
     mesosCluster.agents(1).stop()
+    mesosCluster.masters(1).stop()
+    mesosCluster.masters.head.start()
+    mesosCluster.agents.head.start()
+    mesosCluster.waitForLeader().futureValue
+  }
+
+  after {
+    // restoring the entire cluster increases the changes cleanUp will succeed.
+    mesosCluster.masters.foreach(_.start())
+    mesosCluster.agents.foreach(_.start())
+    mesosCluster.waitForLeader().futureValue
+    cleanUp()
   }
 
   test("A task unreachable update will trigger a replacement task") {

@@ -1,23 +1,23 @@
 package mesosphere.marathon
 package core.task.jobs
 
-import akka.actor.{ActorRef, PoisonPill, Terminated}
+import akka.actor.{ ActorRef, PoisonPill, Terminated }
 import akka.event.LoggingAdapter
 import akka.testkit.TestProbe
 import mesosphere.AkkaUnitTest
-import mesosphere.marathon.core.base.{Clock, ConstantClock}
+import mesosphere.marathon.core.base.{ Clock, ConstantClock }
 import mesosphere.marathon.core.condition.Condition
-import mesosphere.marathon.core.instance.{Instance, TestInstanceBuilder}
+import mesosphere.marathon.core.instance.{ Instance, TestInstanceBuilder }
 import mesosphere.marathon.core.instance.update.InstanceUpdateOperation
-import mesosphere.marathon.core.task.jobs.impl.{ExpungeOverdueLostTasksActor, ExpungeOverdueLostTasksActorLogic}
+import mesosphere.marathon.core.task.jobs.impl.{ ExpungeOverdueLostTasksActor, ExpungeOverdueLostTasksActorLogic }
 import mesosphere.marathon.core.task.tracker.InstanceTracker.InstancesBySpec
-import mesosphere.marathon.core.task.tracker.{InstanceTracker, TaskStateOpProcessor}
+import mesosphere.marathon.core.task.tracker.{ InstanceTracker, TaskStateOpProcessor }
 import mesosphere.marathon.state.PathId._
-import mesosphere.marathon.state.{Timestamp, UnreachableInstanceHandling}
+import mesosphere.marathon.state.{ Timestamp, UnreachableInstanceHandling }
 import mesosphere.marathon.test.MarathonTestHelper
 import org.scalatest.prop.TableDrivenPropertyChecks
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 import scala.concurrent.duration._
 
 class ExpungeOverdueLostTasksActorTest extends AkkaUnitTest with TableDrivenPropertyChecks {
