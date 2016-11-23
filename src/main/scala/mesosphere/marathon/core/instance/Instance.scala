@@ -10,7 +10,7 @@ import mesosphere.marathon.core.instance.update.{ InstanceChangedEventsGenerator
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.core.task.update.{ TaskUpdateEffect, TaskUpdateOperation }
 import mesosphere.marathon.raml.Raml
-import mesosphere.marathon.state.{ MarathonState, PathId, Timestamp, UnreachableInstanceHandling }
+import mesosphere.marathon.state.{ MarathonState, PathId, Timestamp, UnreachableStrategy }
 import mesosphere.marathon.stream._
 import mesosphere.mesos.Placed
 import org.apache._
@@ -31,7 +31,7 @@ case class Instance(
     state: InstanceState,
     tasksMap: Map[Task.Id, Task],
     runSpecVersion: Timestamp,
-    unreachableInstanceHandling: UnreachableInstanceHandling = UnreachableInstanceHandling()) extends MarathonState[Protos.Json, Instance] with Placed {
+    unreachableStrategy: UnreachableStrategy = UnreachableStrategy()) extends MarathonState[Protos.Json, Instance] with Placed {
 
   val runSpecId: PathId = instanceId.runSpecId
   val isLaunched: Boolean = tasksMap.nonEmpty && tasksMap.valuesIterator.forall(task => task.launched.isDefined)
@@ -168,7 +168,7 @@ case class Instance(
 
   private[instance] def updatedInstance(updatedTask: Task, now: Timestamp): Instance = {
     val updatedTasks = tasksMap.updated(updatedTask.taskId, updatedTask)
-    copy(tasksMap = updatedTasks, state = Instance.InstanceState(Some(state), updatedTasks, now, unreachableInstanceHandling.timeUntilInactive))
+    copy(tasksMap = updatedTasks, state = Instance.InstanceState(Some(state), updatedTasks, now, unreachableStrategy.timeUntilInactive))
   }
 }
 
@@ -404,12 +404,12 @@ object Instance {
     }
   }
 
-  implicit object UreachableInstanceHandlingFormat extends Format[UnreachableInstanceHandling] {
-    override def reads(json: JsValue): JsResult[UnreachableInstanceHandling] = {
-      json.validate[raml.UnreachableInstanceHandling].map(Raml.fromRaml(_))
+  implicit object UreachableInstanceHandlingFormat extends Format[UnreachableStrategy] {
+    override def reads(json: JsValue): JsResult[UnreachableStrategy] = {
+      json.validate[raml.UnreachableStrategy].map(Raml.fromRaml(_))
     }
 
-    override def writes(o: UnreachableInstanceHandling): JsValue = {
+    override def writes(o: UnreachableStrategy): JsValue = {
       Json.toJson(Raml.toRaml(o))
     }
   }
@@ -454,11 +454,11 @@ class LegacyAppInstance(
   runSpecVersion: Timestamp) extends Instance(instanceId, agentInfo, state, tasksMap, runSpecVersion)
 
 object LegacyAppInstance {
-  def apply(task: Task, unreachableInstanceHandling: UnreachableInstanceHandling = UnreachableInstanceHandling()): Instance = {
+  def apply(task: Task, unreachableStrategy: UnreachableStrategy = UnreachableStrategy()): Instance = {
     val since = task.status.startedAt.getOrElse(task.status.stagedAt)
     val tasksMap = Map(task.taskId -> task)
     val state = Instance.InstanceState(None, tasksMap, since)
 
-    new Instance(task.taskId.instanceId, task.agentInfo, state, tasksMap, task.runSpecVersion, unreachableInstanceHandling)
+    new Instance(task.taskId.instanceId, task.agentInfo, state, tasksMap, task.runSpecVersion, unreachableStrategy)
   }
 }

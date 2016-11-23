@@ -102,7 +102,7 @@ class InstanceOpFactoryImpl(
           hostPorts = ports.flatten
         )
 
-        val instance = LegacyAppInstance(task, app.unreachableInstanceHandling)
+        val instance = LegacyAppInstance(task, app.unreachableStrategy)
         val instanceOp = taskOperationFactory.launchEphemeral(taskInfo, task, instance)
         OfferMatchResult.Match(app, request.offer, instanceOp, clock.now())
       case matchesNot: ResourceMatchResponse.NoMatch => OfferMatchResult.NoMatch(app, request.offer, matchesNot.reasons, clock.now())
@@ -318,7 +318,7 @@ object InstanceOpFactoryImpl {
         task.taskId -> task
       }(collection.breakOut),
       runSpecVersion = pod.version,
-      unreachableInstanceHandling = pod.unreachableInstanceHandling
+      unreachableStrategy = pod.unreachableStrategy
     )
   } // inferPodInstance
 }

@@ -9,7 +9,7 @@ uses:
   strings: stringTypes.raml
   secrets: secrets.raml
   volumes: volumes.raml
-  unreachableInstanceHandling: unreachableInstanceHandling.raml
+  unreachableStrategy: unreachableStrategy.raml
 types:
   PodScalingPolicyType:
     type: string
@@ -147,4 +147,4 @@ types:
           At this time, only one stack is supported.
       scaling?: PodScalingPolicy
       scheduling?: PodSchedulingPolicy
-      unreachableInstanceHandling?: unreachableInstanceHandling.UnreachableInstanceHandling
+      unreachableStrategy?: unreachableStrategy.UnreachableStrategy

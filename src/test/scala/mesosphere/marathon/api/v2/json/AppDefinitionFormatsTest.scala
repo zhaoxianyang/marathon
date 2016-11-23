@@ -444,27 +444,27 @@ class AppDefinitionFormatsTest
     (json \ "secrets" \ "secret3" \ "source").as[String] should equal("/foo2")
   }
 
-  test("FromJSON should parse unreachable instance handling") {
+  test("FromJSON should parse unreachable instance strategy") {
     val appDef = Json.parse(
       """{
         |  "id": "test",
-        |  "unreachableInstanceHandling": {
+        |  "unreachableStrategy": {
         |      "timeUntilInactive": 600,
         |      "timeUntilExpunge": 1200
         |  }
         |}""".stripMargin).as[AppDefinition]
 
-    appDef.unreachableInstanceHandling.timeUntilInactive should be(10.minutes)
-    appDef.unreachableInstanceHandling.timeUntilExpunge should be(20.minutes)
+    appDef.unreachableStrategy.timeUntilInactive should be(10.minutes)
+    appDef.unreachableStrategy.timeUntilExpunge should be(20.minutes)
   }
 
-  test("ToJSON should serialize unreachable instance handling") {
-    val handling = UnreachableInstanceHandling(6.minutes, 12.minutes)
-    val appDef = AppDefinition(id = PathId("test"), unreachableInstanceHandling = handling)
+  test("ToJSON should serialize unreachable instance strategy") {
+    val strategy = UnreachableStrategy(6.minutes, 12.minutes)
+    val appDef = AppDefinition(id = PathId("test"), unreachableStrategy = strategy)
 
     val json = Json.toJson(appDef)
 
-    (json \ "unreachableInstanceHandling" \ "timeUntilInactive").as[Long] should be(360)
-    (json \ "unreachableInstanceHandling" \ "timeUntilExpunge").as[Long] should be(720)
+    (json \ "unreachableStrategy" \ "timeUntilInactive").as[Long] should be(360)
+    (json \ "unreachableStrategy" \ "timeUntilExpunge").as[Long] should be(720)
   }
 }
