@@ -759,7 +759,7 @@ trait HealthCheckFormats {
   implicit val MesosHttpHealthCheckFormat: Format[MesosHttpHealthCheck] = {
     (
       HttpHealthCheckFormatBuilder ~
-      (__ \ "delay").formatNullable[Long].withDefault(HealthCheck.DefaultDelay.toSeconds).asSeconds
+      (__ \ "delaySeconds").formatNullable[Long].withDefault(HealthCheck.DefaultDelay.toSeconds).asSeconds
     )(MesosHttpHealthCheck.apply, unlift(MesosHttpHealthCheck.unapply))
   }
 
@@ -773,14 +773,14 @@ trait HealthCheckFormats {
 
   implicit val MesosCommandHealthCheckFormat: Format[MesosCommandHealthCheck] = (
     BasicHealthCheckFormatBuilder ~
-    (__ \ "delay").formatNullable[Long].withDefault(HealthCheck.DefaultDelay.toSeconds).asSeconds ~
+    (__ \ "delaySeconds").formatNullable[Long].withDefault(HealthCheck.DefaultDelay.toSeconds).asSeconds ~
     (__ \ "command").format[Executable]
   )(MesosCommandHealthCheck.apply, unlift(MesosCommandHealthCheck.unapply))
 
   implicit val MesosTcpHealthCheckFormat: Format[MesosTcpHealthCheck] = {
     (
       HealthCheckWithPortsFormatBuilder ~
-      (__ \ "delay").formatNullable[Long].withDefault(HealthCheck.DefaultDelay.toSeconds).asSeconds
+      (__ \ "delaySeconds").formatNullable[Long].withDefault(HealthCheck.DefaultDelay.toSeconds).asSeconds
     )(MesosTcpHealthCheck.apply, unlift(MesosTcpHealthCheck.unapply))
   }
 
@@ -1151,7 +1151,7 @@ trait AppAndGroupFormats {
       var appJson: JsObject = Json.obj(
         "id" -> runSpec.id.toString,
         "cmd" -> runSpec.cmd,
-        "args" -> runSpec.args,
+        "args" -> (if (runSpec.args.isEmpty) JsNull else runSpec.args),
         "user" -> runSpec.user,
         "env" -> runSpec.env,
         "instances" -> runSpec.instances,
