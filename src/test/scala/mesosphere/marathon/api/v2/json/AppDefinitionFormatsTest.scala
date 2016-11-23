@@ -449,13 +449,13 @@ class AppDefinitionFormatsTest
       """{
         |  "id": "test",
         |  "unreachableStrategy": {
-        |      "timeUntilInactive": 600,
-        |      "timeUntilExpunge": 1200
+        |      "timeUntilInactiveSeconds": 600,
+        |      "timeUntilExpungeSeconds": 1200
         |  }
         |}""".stripMargin).as[AppDefinition]
 
-    appDef.unreachableStrategy.timeUntilInactive should be(10.minutes)
-    appDef.unreachableStrategy.timeUntilExpunge should be(20.minutes)
+    appDef.unreachableStrategy.timeUntilInactiveSeconds should be(10.minutes)
+    appDef.unreachableStrategy.timeUntilExpungeSeconds should be(20.minutes)
   }
 
   test("ToJSON should serialize unreachable instance strategy") {
@@ -464,7 +464,7 @@ class AppDefinitionFormatsTest
 
     val json = Json.toJson(appDef)
 
-    (json \ "unreachableStrategy" \ "timeUntilInactive").as[Long] should be(360)
-    (json \ "unreachableStrategy" \ "timeUntilExpunge").as[Long] should be(720)
+    (json \ "unreachableStrategy" \ "timeUntilInactiveSeconds").as[Long] should be(360)
+    (json \ "unreachableStrategy" \ "timeUntilExpungeSeconds").as[Long] should be(720)
   }
 }
