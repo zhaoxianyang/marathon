@@ -260,11 +260,14 @@ object Instance {
       * @return condition for instance with tasks.
       */
     def conditionFromTasks(tasks: Iterable[Task], now: Timestamp, timeUntilInactive: FiniteDuration): Condition = {
-      // TODO: Fails on empty tasks
-      // The smallest Condition according to conditionOrdering is the condition for the whole instance.
-      tasks.view.map(_.status.condition).minBy(conditionHierarchy) match {
-        case Condition.Unreachable if shouldBecomeInactive(tasks, now, timeUntilInactive) => Condition.UnreachableInactive
-        case condition => condition
+      if (tasks.isEmpty) {
+        Condition.Unknown
+      } else {
+        // The smallest Condition according to conditionOrdering is the condition for the whole instance.
+        tasks.view.map(_.status.condition).minBy(conditionHierarchy) match {
+          case Condition.Unreachable if shouldBecomeInactive(tasks, now, timeUntilInactive) => Condition.UnreachableInactive
+          case condition => condition
+        }
       }
     }
 

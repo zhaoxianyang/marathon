@@ -11,6 +11,8 @@ class TaskStatusComparisonTest extends UnitTest with TableDrivenPropertyChecks {
   "A task" when {
 
     // format: OFF
+    // Conditions and their expected flag values. e.g. if status is Condition.Reserved isReserved is expected to be true
+    // and isCreated to be false.
     val conditions = Table (
       ("condition",                   "isReserved", "isCreated", "isError", "isFailed", "isFinished", "isKilled", "isKilling", "isRunning", "isStaging", "isStarting", "isUnreachable", "isUnreachableInactive", "isGone", "isUnknown", "isDropped", "isActive", "isTerminal"),
       (Condition.Reserved,            true,         false,       false,     false,      false,        false,      false,       false,       false,       false,        false,           false,                   false,    false,       false,       false,      false       ),

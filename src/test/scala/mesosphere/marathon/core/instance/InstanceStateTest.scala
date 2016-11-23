@@ -126,6 +126,16 @@ class InstanceStateTest extends UnitTest with TableDrivenPropertyChecks {
         s"return condition $expected" in { actualCondition should be(expected) }
       }
     }
+
+  }
+
+  it should {
+    "return Unknown for an empty task list" in {
+      val f = new Fixture()
+      val result = Instance.InstanceState.conditionFromTasks(Iterable.empty, f.clock.now(), 5.minutes)
+
+      result should be(Condition.Unknown)
+    }
   }
 
   class Fixture {
