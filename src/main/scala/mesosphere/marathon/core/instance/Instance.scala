@@ -413,6 +413,16 @@ object Instance {
     }
   }
 
+  implicit object KillSelectionFormat extends Format[UnreachableStrategy.KillSelection] {
+    override def reads(json: JsValue): JsResult[UnreachableStrategy.KillSelection] = {
+      json.validate[String].map(UnreachableStrategy.KillSelection.withName(_))
+    }
+
+    override def writes(o: UnreachableStrategy.KillSelection): JsValue = {
+      Json.toJson(o.toString())
+    }
+  }
+
   implicit val unreachableStrategyFormat = Json.format[UnreachableStrategy]
   implicit val agentFormat: Format[AgentInfo] = Json.format[AgentInfo]
   implicit val idFormat: Format[Instance.Id] = Json.format[Instance.Id]
