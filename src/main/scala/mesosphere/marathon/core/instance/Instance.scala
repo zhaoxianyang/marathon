@@ -15,13 +15,12 @@ import mesosphere.mesos.Placed
 import org.apache._
 import org.apache.mesos.Protos.Attribute
 import org.slf4j.{ Logger, LoggerFactory }
-import play.api.libs.json.{ Reads, Writes }
+import play.api.libs.json._
+import play.api.libs.functional.syntax._
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 // TODO: Remove timestamp format
-import mesosphere.marathon.api.v2.json.Formats.TimestampFormat
-import play.api.libs.json.{ Format, JsResult, JsString, JsValue, Json }
 
 // TODO: remove MarathonState stuff once legacy persistence is gone
 case class Instance(
@@ -173,6 +172,9 @@ case class Instance(
 
 @SuppressWarnings(Array("DuplicateImport"))
 object Instance {
+
+  import mesosphere.marathon.api.v2.json.Formats.TimestampFormat
+
   @SuppressWarnings(Array("LooksLikeInterpolatedString"))
   def apply(): Instance = {
     // required for legacy store, remove when legacy storage is removed.
@@ -415,7 +417,13 @@ object Instance {
 
   implicit object KillSelectionFormat extends Format[UnreachableStrategy.KillSelection] {
     override def reads(json: JsValue): JsResult[UnreachableStrategy.KillSelection] = {
-      json.validate[String].map(UnreachableStrategy.KillSelection.withName(_))
+      json.validate[String].flatMap { selection: String =>
+        try {
+          JsSuccess(UnreachableStrategy.KillSelection.withName(selection))
+        } catch {
+          case e: NoSuchElementException => JsError(e.getMessage)
+        }
+      }
     }
 
     override def writes(o: UnreachableStrategy.KillSelection): JsValue = {
@@ -423,7 +431,20 @@ object Instance {
     }
   }
 
-  implicit val unreachableStrategyFormat = Json.format[UnreachableStrategy]
+  implicit val unreachableStrategyReads: Reads[UnreachableStrategy] = {
+    (
+      (__ \ "timeUntilInactive").readNullable[FiniteDuration] ~
+      (__ \ "timeUntilExpunge").readNullable[FiniteDuration] ~
+      (__ \ "killingSelection").readNullable[UnreachableStrategy.KillSelection]
+    )((timeUntilInactive, timeUntilExpunge, killingSelection) =>
+        UnreachableStrategy(
+          timeUntilInactive.getOrElse(UnreachableStrategy.DefaultTimeUntilInactive),
+          timeUntilExpunge.getOrElse(UnreachableStrategy.DefaultTimeUntilExpunge),
+          killingSelection.getOrElse(UnreachableStrategy.DefaultKillSelection))
+      )
+  }
+  implicit val unreachableStrategyWrites = Json.writes[UnreachableStrategy]
+
   implicit val agentFormat: Format[AgentInfo] = Json.format[AgentInfo]
   implicit val idFormat: Format[Instance.Id] = Json.format[Instance.Id]
   implicit val instanceConditionFormat: Format[Condition] = Json.format[Condition]
