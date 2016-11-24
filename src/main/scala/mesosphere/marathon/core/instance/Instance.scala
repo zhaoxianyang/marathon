@@ -241,12 +241,12 @@ object Instance {
       maybeOldState: Option[InstanceState],
       newTaskMap: Map[Task.Id, Task],
       now: Timestamp,
-      timeUntilInactiveSeconds: FiniteDuration = 5.minutes): InstanceState = {
+      timeUntilInactive: FiniteDuration = 5.minutes): InstanceState = {
 
       val tasks = newTaskMap.values
 
       // compute the new instance condition
-      val condition = conditionFromTasks(tasks, now, timeUntilInactiveSeconds)
+      val condition = conditionFromTasks(tasks, now, timeUntilInactive)
 
       val active: Option[Timestamp] = activeSince(tasks)
 
@@ -260,13 +260,13 @@ object Instance {
     /**
       * @return condition for instance with tasks.
       */
-    def conditionFromTasks(tasks: Iterable[Task], now: Timestamp, timeUntilInactiveSeconds: FiniteDuration): Condition = {
+    def conditionFromTasks(tasks: Iterable[Task], now: Timestamp, timeUntilInactive: FiniteDuration): Condition = {
       if (tasks.isEmpty) {
         Condition.Unknown
       } else {
         // The smallest Condition according to conditionOrdering is the condition for the whole instance.
         tasks.view.map(_.status.condition).minBy(conditionHierarchy) match {
-          case Condition.Unreachable if shouldBecomeInactive(tasks, now, timeUntilInactiveSeconds) => Condition.UnreachableInactive
+          case Condition.Unreachable if shouldBecomeInactive(tasks, now, timeUntilInactive) => Condition.UnreachableInactive
           case condition => condition
         }
       }
@@ -283,10 +283,10 @@ object Instance {
     }
 
     /**
-      * @return if one of tasks has been UnreachableInactive for more than timeUntilInactiveSeconds.
+      * @return if one of tasks has been UnreachableInactive for more than timeUntilInactive.
       */
-    def shouldBecomeInactive(tasks: Iterable[Task], now: Timestamp, timeUntilInactiveSeconds: FiniteDuration): Boolean = {
-      tasks.exists(_.isUnreachableExpired(now, timeUntilInactiveSeconds))
+    def shouldBecomeInactive(tasks: Iterable[Task], now: Timestamp, timeUntilInactive: FiniteDuration): Boolean = {
+      tasks.exists(_.isUnreachableExpired(now, timeUntilInactive))
     }
   }
 
