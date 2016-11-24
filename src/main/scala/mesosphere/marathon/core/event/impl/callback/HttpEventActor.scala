@@ -1,7 +1,5 @@
 package mesosphere.marathon.core.event.impl.callback
 
-//import java.io.{PrintWriter, StringWriter}
-
 import akka.actor._
 import akka.pattern.ask
 import mesosphere.marathon.api.v2.json.Formats._
@@ -88,9 +86,7 @@ class HttpEventActor(
       me ! Broadcast(event, subscribers)
     }.onFailure {
       case NonFatal(e) =>
-        //        val stackTrace = new StringWriter()
-        //        e.printStackTrace(new PrintWriter(stackTrace))
-        log.error("While trying to resolve subscribers for event {}", event)
+        log.error("While trying to resolve subscribers for event {}: {}", event, e.getMessage: Any)
     }
   }
 

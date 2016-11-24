@@ -454,8 +454,8 @@ class AppDefinitionFormatsTest
         |  }
         |}""".stripMargin).as[AppDefinition]
 
-    appDef.unreachableStrategy.timeUntilInactiveSeconds should be(10.minutes)
-    appDef.unreachableStrategy.timeUntilExpungeSeconds should be(20.minutes)
+    appDef.unreachableStrategy.timeUntilInactive should be(10.minutes)
+    appDef.unreachableStrategy.timeUntilExpunge should be(20.minutes)
   }
 
   test("ToJSON should serialize unreachable instance strategy") {

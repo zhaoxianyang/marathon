@@ -11,14 +11,14 @@ trait UnreachableStrategyConversion {
 
   implicit val ramlRead = Reads[UnreachableStrategy, state.UnreachableStrategy] { handling =>
     state.UnreachableStrategy(
-      timeUntilInactiveSeconds = handling.timeUntilInactiveSeconds.seconds,
-      timeUntilExpungeSeconds = handling.timeUntilExpungeSeconds.seconds)
+      timeUntilInactive = handling.timeUntilInactiveSeconds.seconds,
+      timeUntilExpunge = handling.timeUntilExpungeSeconds.seconds)
   }
 
   implicit val ramlWrite = Writes[state.UnreachableStrategy, UnreachableStrategy]{ handling =>
     UnreachableStrategy(
-      timeUntilInactiveSeconds = handling.timeUntilInactiveSeconds.toSeconds,
-      timeUntilExpungeSeconds = handling.timeUntilExpungeSeconds.toSeconds)
+      timeUntilInactiveSeconds = handling.timeUntilInactive.toSeconds,
+      timeUntilExpungeSeconds = handling.timeUntilExpunge.toSeconds)
   }
 }
 

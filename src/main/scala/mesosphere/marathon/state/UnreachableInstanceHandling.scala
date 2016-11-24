@@ -5,4 +5,10 @@ import scala.concurrent.duration._
 /**
   * Defines the time outs and kill strategy for unreachable tasks.
   */
-case class UnreachableStrategy(timeUntilInactiveSeconds: FiniteDuration = 3.minutes, timeUntilExpungeSeconds: FiniteDuration = 6.minutes)
+case class UnreachableStrategy(timeUntilInactive: FiniteDuration = UnreachableStrategy.DefaultTimeUntilInactive,
+                               timeUntilExpunge: FiniteDuration = UnreachableStrategy.DefaultTimeUntilExpunge)
+
+object UnreachableStrategy {
+  val DefaultTimeUntilInactive = 3.minutes
+  val DefaultTimeUntilExpunge = 6.minutes
+}

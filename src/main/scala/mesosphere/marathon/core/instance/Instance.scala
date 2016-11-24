@@ -167,7 +167,7 @@ case class Instance(
 
   private[instance] def updatedInstance(updatedTask: Task, now: Timestamp): Instance = {
     val updatedTasks = tasksMap.updated(updatedTask.taskId, updatedTask)
-    copy(tasksMap = updatedTasks, state = Instance.InstanceState(Some(state), updatedTasks, now, unreachableStrategy.timeUntilInactiveSeconds))
+    copy(tasksMap = updatedTasks, state = Instance.InstanceState(Some(state), updatedTasks, now, unreachableStrategy.timeUntilInactive))
   }
 }
 
