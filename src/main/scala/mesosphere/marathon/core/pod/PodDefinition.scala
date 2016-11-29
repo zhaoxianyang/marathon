@@ -3,7 +3,7 @@ package core.pod
 
 // scalastyle:off
 import mesosphere.marathon.core.task.Task
-import mesosphere.marathon.raml.{Endpoint, ExecutorResources, Pod, Raml, Resources}
+import mesosphere.marathon.raml.{ Endpoint, ExecutorResources, Pod, Raml, Resources }
 import mesosphere.marathon.state._
 import play.api.libs.json.Json
 
