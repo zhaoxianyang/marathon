@@ -36,8 +36,7 @@ class HealthCheckWorkerActor extends Actor {
           case Success(Some(result)) => replyTo ! result
           case Success(None) => // ignore
           case Failure(t) =>
-            log.debug("Performing health check failed with exception {}", t.getMessage)
-            t.printStackTrace()
+            log.debug("Performing health check failed with exception", t)
             replyTo ! Unhealthy(
               task.taskId,
               task.runSpecVersion,
