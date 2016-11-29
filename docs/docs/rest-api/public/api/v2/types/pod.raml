@@ -148,3 +148,6 @@ types:
       scaling?: PodScalingPolicy
       scheduling?: PodSchedulingPolicy
       unreachableStrategy?: unreachableStrategy.UnreachableStrategy
+      executorResources?:
+          type: resources.ExecutorResources
+          description: The resources to allocate to the executor.
