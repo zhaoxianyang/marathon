@@ -14,7 +14,7 @@ object ScalingProposition {
     toKill: Option[Seq[Instance]],
     meetConstraints: ((Seq[Instance], Int) => Seq[Instance]),
     scaleTo: Int,
-    selectKill: UnreachableStrategy.KillSelection = UnreachableStrategy.DefaultKillSelection): ScalingProposition = {
+    killSelection: UnreachableStrategy.KillSelection = UnreachableStrategy.DefaultKillSelection): ScalingProposition = {
 
     val killingTaskCount = runningTasks.count(_.state.condition == Condition.Killing)
 
@@ -37,7 +37,7 @@ object ScalingProposition {
     val rest: Seq[Instance] = (notSentencedAndRunningMap -- killToMeetConstraints.map(_.instanceId)).values.to[Seq]
 
     val ordered =
-      Seq(sentencedAndRunningMap.values, killToMeetConstraints, rest.sortWith(sortByConditionAndDate(selectKill))).flatten
+      Seq(sentencedAndRunningMap.values, killToMeetConstraints, rest.sortWith(sortByConditionAndDate(killSelection))).flatten
 
     val candidatesToKill = ordered.take(killCount)
     val numberOfTasksToStart = scaleTo - runningTasks.size + killCount

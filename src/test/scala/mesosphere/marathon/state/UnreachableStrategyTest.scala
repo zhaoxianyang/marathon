@@ -1,18 +1,18 @@
 package mesosphere.marathon.state
 
 import mesosphere.UnitTest
-import mesosphere.marathon.state.UnreachableStrategy.{ OldestFirst, YoungestFirst }
+import mesosphere.marathon.state.UnreachableStrategy.KillSelection.{ OldestFirst, YoungestFirst }
 
 class UnreachableStrategyTest extends UnitTest {
 
   "UnreachableStrategy.KillSelection" should {
 
     "parse all value 'YoungestFirst'" in {
-      UnreachableStrategy.KillSelection.withName("YoungestFirst") should be(UnreachableStrategy.YoungestFirst)
+      UnreachableStrategy.KillSelection.withName("YoungestFirst") should be(YoungestFirst)
     }
 
     "parse all value 'OldestFirst'" in {
-      UnreachableStrategy.KillSelection.withName("OldestFirst") should be(UnreachableStrategy.OldestFirst)
+      UnreachableStrategy.KillSelection.withName("OldestFirst") should be(OldestFirst)
     }
   }
 

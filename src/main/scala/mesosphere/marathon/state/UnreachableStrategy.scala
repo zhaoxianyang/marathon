@@ -15,12 +15,12 @@ case class UnreachableStrategy(
 object UnreachableStrategy {
   val DefaultTimeUntilInactive = 3.minutes
   val DefaultTimeUntilExpunge = 6.minutes
-  val DefaultKillSelection = YoungestFirst
+  val DefaultKillSelection = KillSelection.YoungestFirst
 
   sealed trait KillSelection {
     def apply(a: Timestamp, b: Timestamp): Boolean = this match {
-      case YoungestFirst => a.youngerThan(b)
-      case OldestFirst => a.olderThan(b)
+      case KillSelection.YoungestFirst => a.youngerThan(b)
+      case KillSelection.OldestFirst => a.olderThan(b)
     }
   }
 
@@ -31,7 +31,7 @@ object UnreachableStrategy {
       else throw new NoSuchElementException(s"There is no KillSelection with name '$value'")
     }
 
+    case object YoungestFirst extends KillSelection
+    case object OldestFirst extends KillSelection
   }
-  case object YoungestFirst extends KillSelection
-  case object OldestFirst extends KillSelection
 }

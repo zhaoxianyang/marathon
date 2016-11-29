@@ -20,7 +20,6 @@ import play.api.libs.functional.syntax._
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
-// TODO: Remove timestamp format
 
 // TODO: remove MarathonState stuff once legacy persistence is gone
 case class Instance(
@@ -431,25 +430,28 @@ object Instance {
     }
   }
 
-  implicit val unreachableStrategyReads: Reads[UnreachableStrategy] = {
-    (
-      (__ \ "timeUntilInactive").readNullable[FiniteDuration] ~
-      (__ \ "timeUntilExpunge").readNullable[FiniteDuration] ~
-      (__ \ "killingSelection").readNullable[UnreachableStrategy.KillSelection]
-    )((timeUntilInactive, timeUntilExpunge, killingSelection) =>
-        UnreachableStrategy(
-          timeUntilInactive.getOrElse(UnreachableStrategy.DefaultTimeUntilInactive),
-          timeUntilExpunge.getOrElse(UnreachableStrategy.DefaultTimeUntilExpunge),
-          killingSelection.getOrElse(UnreachableStrategy.DefaultKillSelection))
-      )
-  }
-  implicit val unreachableStrategyWrites = Json.writes[UnreachableStrategy]
+  implicit val unreachableStrategyFormat = Json.format[UnreachableStrategy]
 
   implicit val agentFormat: Format[AgentInfo] = Json.format[AgentInfo]
   implicit val idFormat: Format[Instance.Id] = Json.format[Instance.Id]
   implicit val instanceConditionFormat: Format[Condition] = Json.format[Condition]
   implicit val instanceStateFormat: Format[InstanceState] = Json.format[InstanceState]
-  implicit val instanceJsonFormat: Format[Instance] = Json.format[Instance]
+
+  implicit val instanceJsonWrites: Writes[Instance] = Json.writes[Instance]
+  implicit val unreachableStrategyReads: Reads[Instance] = {
+    (
+      (__ \ "instanceId").read[Instance.Id] ~
+      (__ \ "agentInfo").read[AgentInfo] ~
+      (__ \ "tasksMap").read[Map[Task.Id, Task]] ~
+      (__ \ "runSpecVersion").read[Timestamp] ~
+      (__ \ "state").read[InstanceState] ~
+      (__ \ "unreachableStrategy").readNullable[UnreachableStrategy]
+    ) { (instanceId, agentInfo, tasksMap, runSpecVersion, state, maybeUnreachableStrategy) =>
+        val unreachableStrategy = maybeUnreachableStrategy.getOrElse(UnreachableStrategy())
+        new Instance(instanceId, agentInfo, state, tasksMap, runSpecVersion, unreachableStrategy)
+      }
+  }
+
   implicit lazy val tasksMapFormat: Format[Map[Task.Id, Task]] = Format(
     Reads.of[Map[String, Task]].map {
       _.map { case (k, v) => Task.Id(k) -> v }

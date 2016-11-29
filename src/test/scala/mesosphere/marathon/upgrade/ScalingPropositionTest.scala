@@ -247,16 +247,16 @@ class ScalingPropositionTest extends UnitTest {
         ScalingProposition.sortByConditionAndDate(UnreachableStrategy.DefaultKillSelection)(runningInstanceOlder, runningInstance) shouldBe false
       }
       "put younger staging before younger staging" in {
-        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.YoungestFirst)(stagingInstanceOlder, stagingInstance) shouldBe false
-        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.YoungestFirst)(stagingInstance, stagingInstanceOlder) shouldBe true
+        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.KillSelection.YoungestFirst)(stagingInstanceOlder, stagingInstance) shouldBe false
+        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.KillSelection.YoungestFirst)(stagingInstance, stagingInstanceOlder) shouldBe true
       }
       "put younger starting before younger starting" in {
-        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.YoungestFirst)(startingInstanceOlder, startingInstance) shouldBe false
-        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.YoungestFirst)(startingInstance, startingInstanceOlder) shouldBe true
+        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.KillSelection.YoungestFirst)(startingInstanceOlder, startingInstance) shouldBe false
+        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.KillSelection.YoungestFirst)(startingInstance, startingInstanceOlder) shouldBe true
       }
       "put younger running before younger running " in {
-        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.YoungestFirst)(runningInstance, runningInstanceOlder) shouldBe true
-        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.YoungestFirst)(runningInstanceOlder, runningInstance) shouldBe false
+        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.KillSelection.YoungestFirst)(runningInstance, runningInstanceOlder) shouldBe true
+        ScalingProposition.sortByConditionAndDate(UnreachableStrategy.KillSelection.YoungestFirst)(runningInstanceOlder, runningInstance) shouldBe false
       }
     }
   }
