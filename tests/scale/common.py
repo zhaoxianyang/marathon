@@ -135,3 +135,17 @@ def cluster_info(mom_name='marathon-user'):
 
         except Exception as e:
             print("Marathon MoM not present")
+
+
+def get_mom_json(version='v1.3.5'):
+    mom_json = get_resource("mom.json")
+    docker_image = "mesosphere/marathon:{}".format(version)
+    mom_json['container']['docker']['image'] = docker_image
+    mom_json['labels']['DCOS_PACKAGE_VERSION'] = version
+    return mom_json
+
+
+def install_mom(version='v1.3.5'):
+    client = marathon.create_client()
+    client.add_app(get_mom_json(version))
+    deployment_wait()
