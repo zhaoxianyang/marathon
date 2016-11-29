@@ -54,7 +54,7 @@ class InstanceFormatTest extends UnitTest {
           |  "state": { "since": "2015-01-01", "condition": { "str": "Running" } }
           |}""".stripMargin)
       val instance = json.as[Instance]
-      
+
       instance.unreachableStrategy.killSelection should be(UnreachableStrategy.DefaultKillSelection)
       instance.unreachableStrategy.timeUntilInactive should be(UnreachableStrategy.DefaultTimeUntilInactive)
       instance.unreachableStrategy.timeUntilExpunge should be(UnreachableStrategy.DefaultTimeUntilExpunge)
