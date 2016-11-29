@@ -34,7 +34,7 @@ case class MesosConfig(
   */
 case class MesosLocal(numSlaves: Int = 1, autoStart: Boolean = true,
     config: MesosConfig = MesosConfig(),
-    waitForStart: Duration = 30.seconds)(implicit
+    waitForStart: FiniteDuration = 30.seconds)(implicit
   system: ActorSystem,
     mat: Materializer,
     ctx: ExecutionContext,
@@ -101,7 +101,7 @@ case class MesosLocal(numSlaves: Int = 1, autoStart: Boolean = true,
     val process = Process(
       s"mesos-local --ip=127.0.0.1 --port=$port --work_dir=${mesosWorkDir.getAbsolutePath}",
       cwd = None, mesosEnv: _*)
-    process.run(ProcessOutputToLogStream("MesosLocal"))
+    process.run(ProcessOutputToLogStream(s"MesosLocal-$port"))
   }
 
   private var mesosLocal = Option.empty[Process]
@@ -146,7 +146,7 @@ case class MesosCluster(
     quorumSize: Int = 1,
     autoStart: Boolean = false,
     config: MesosConfig = MesosConfig(),
-    waitForLeaderTimeout: Duration = 30.seconds)(implicit
+    waitForLeaderTimeout: FiniteDuration = 30.seconds)(implicit
   system: ActorSystem,
     mat: Materializer,
     ctx: ExecutionContext,
@@ -276,7 +276,7 @@ case class MesosCluster(
     }
 
     private def create(): Process = {
-      processBuilder.run(ProcessOutputToLogStream(if (master) "MesosMaster" else "MesosAgent"))
+      processBuilder.run(ProcessOutputToLogStream(if (master) s"MesosMaster-$port" else s"MesosAgent-$port"))
     }
 
     override def close(): Unit = {
@@ -339,7 +339,7 @@ trait MesosClusterTest extends Suite with ZookeeperServerTest with MesosTest wit
   lazy val mesosNumSlaves = 2
   lazy val mesosQuorumSize = 1
   lazy val mesosConfig = MesosConfig()
-  lazy val mesosLeaderTimeout: Duration = patienceConfig.timeout.toMillis.milliseconds
+  lazy val mesosLeaderTimeout: FiniteDuration = patienceConfig.timeout.toMillis.milliseconds
   lazy val mesosCluster = MesosCluster(mesosNumMasters, mesosNumSlaves, mesosMasterUrl, mesosQuorumSize,
     autoStart = false, config = mesosConfig, mesosLeaderTimeout)
   lazy val mesos = new MesosFacade(s"http:${mesosCluster.waitForLeader().futureValue}")
