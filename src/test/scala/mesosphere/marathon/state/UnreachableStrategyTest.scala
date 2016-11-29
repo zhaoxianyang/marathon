@@ -1,7 +1,10 @@
-package mesosphere.marathon.state
+package mesosphere.marathon
+package state
 
 import mesosphere.UnitTest
 import mesosphere.marathon.state.UnreachableStrategy.KillSelection.{ OldestFirst, YoungestFirst }
+
+import scala.concurrent.duration._
 
 class UnreachableStrategyTest extends UnitTest {
 
@@ -35,6 +38,23 @@ class UnreachableStrategyTest extends UnitTest {
     "select the older timestamp" in {
       OldestFirst(Timestamp.zero, Timestamp(1)) should be(true)
       OldestFirst(Timestamp(1), Timestamp.zero) should be(false)
+    }
+  }
+
+  "UnreachableStrategy.unreachableStrategyValidator" should {
+    "validate default strategy" in {
+      val strategy = UnreachableStrategy()
+      UnreachableStrategy.unreachableStrategyValidator(strategy).isSuccess should be(true)
+    }
+
+    "fail with invalid time until inactive" in {
+      val strategy = UnreachableStrategy(timeUntilInactive = 0.seconds)
+      UnreachableStrategy.unreachableStrategyValidator(strategy).isSuccess should be(false)
+    }
+
+    "fail when time until expunge is smaller" in {
+      val strategy = UnreachableStrategy(timeUntilInactive = 2.seconds, timeUntilExpunge = 1.second)
+      UnreachableStrategy.unreachableStrategyValidator(strategy).isSuccess should be(false)
     }
   }
 }

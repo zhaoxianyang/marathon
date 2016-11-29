@@ -37,7 +37,7 @@ object UnreachableStrategy {
   }
 
   implicit val unreachableStrategyValidator = validator[UnreachableStrategy] { strategy =>
-    strategy.timeUntilInactive must be > 1.second
-    strategy.timeUntilInactive must be > strategy.timeUntilExpunge
+    (strategy.timeUntilInactive should be >= 1.second) and
+      (strategy.timeUntilInactive should be > strategy.timeUntilExpunge)
   }
 }
