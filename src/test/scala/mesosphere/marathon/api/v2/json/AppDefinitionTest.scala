@@ -27,6 +27,7 @@ class AppDefinitionTest extends MarathonSpec with Matchers {
   val enabledFeatures = Set("secrets")
   val validAppDefinition = AppDefinition.validAppDefinition(enabledFeatures)(PluginManager.None)
 
+  // TODO AppDefinition.json schema is out of date w/ respect to RAML
   test("Validation", Unstable) {
     def shouldViolate(app: AppDefinition, path: String, template: String)(implicit validAppDef: Validator[AppDefinition] = validAppDefinition): Unit = {
       validate(app) match {
@@ -468,7 +469,7 @@ class AppDefinitionTest extends MarathonSpec with Matchers {
         "healthChecks": [
           {
             "protocol": "COMMAND",
-            "command": { "command": "env && http http://$HOST:$PORT0/" }
+            "command": { "value": "env && http http://$HOST:$PORT0/" }
           }
         ],
         "instances": 2,
@@ -551,7 +552,9 @@ class AppDefinitionTest extends MarathonSpec with Matchers {
     )
 
     val json = Json.toJson(app).toString()
-    a[ValidationFailedException] shouldBe thrownBy(fromJson(json))
+    val reread = fromJson(json)
+
+    reread.healthChecks.headOption should be(Some(MarathonHttpHealthCheck(portIndex = None)))
   }
 
   test("Reading AppDefinition adds portIndex to a Marathon HTTP health check if it has at least one portMapping") {
@@ -948,8 +951,8 @@ class AppDefinitionTest extends MarathonSpec with Matchers {
 
     val result = fromJson(json)
     assert(result.env.equals(Map[String, EnvVarValue](
-      "QWE" -> "rty".toEnvVar,
-      "SSH" -> EnvVarSecretRef("psst")
+      "qwe" -> "rty".toEnvVar,
+      "ssh" -> EnvVarSecretRef("psst")
     )), result.env)
   }
 

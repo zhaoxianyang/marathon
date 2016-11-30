@@ -218,6 +218,7 @@ object RamlTypeGenerator {
         case "Long" => LIT(d.toLong)
         case "Float" => LIT(d.toFloat)
         case "Double" => LIT(d.toDouble)
+        case "Boolean" => LIT(d.toBoolean)
         case "String" => LIT(d)
         // hopefully this is actually an enum
         case t => (`type` DOT underscoreToCamel(camelify(d))).tree

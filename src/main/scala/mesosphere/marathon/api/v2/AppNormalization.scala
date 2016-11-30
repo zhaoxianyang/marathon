@@ -148,7 +148,7 @@ trait AppNormalization {
       ports = None,
       // health checks
       healthChecks = update.healthChecks.map(normalizeHealthChecks),
-      env = update.env
+      readinessChecks = update.readinessChecks.map(_.map(normalizeReadinessCheck))
     )
   }
 
@@ -169,6 +169,10 @@ trait AppNormalization {
 
   def dropDockerNetworks(c: Container): Container =
     c.docker.find(_.network.nonEmpty).fold(c)(d => c.copy(docker = Some(d.copy(network = None))))
+
+  def normalizeReadinessCheck(check: ReadinessCheck): ReadinessCheck =
+    if (check.httpStatusCodesForReady.nonEmpty) check
+    else check.copy(httpStatusCodesForReady = core.readiness.ReadinessCheck.DefaultHttpStatusCodesForReady)
 
   /**
     * only deprecated fields and their interaction with canonical fields have been validated so far,
@@ -210,8 +214,9 @@ trait AppNormalization {
         ))
 
     val healthChecks =
-      // for an app (not an update) only normalize if there are ports defined somewhere
-      if (portDefinitions.exists(_.nonEmpty) || container.exists(_.portMappings.nonEmpty)) normalizeHealthChecks(app.healthChecks)
+      // for an app (not an update) only normalize if there are ports defined somewhere.
+      // intentionally consider the non-normalized portDefinitions since that's what the old Formats code did
+      if (app.portDefinitions.exists(_.nonEmpty) || container.exists(_.portMappings.nonEmpty)) normalizeHealthChecks(app.healthChecks)
       else app.healthChecks
 
     // cheating: we know that this is invoked before canonical validation so we provide a default here.
@@ -233,11 +238,9 @@ trait AppNormalization {
       // normalize ports
       portDefinitions = portDefinitions,
       ports = None,
-      // health checks
+      // and the rest (simple)
       healthChecks = healthChecks,
-      // residency
-      residency = residency,
-      env = app.env
+      residency = residency
     )
   }
 
@@ -253,7 +256,8 @@ trait AppNormalization {
 
     app.copy(
       container = container,
-      networks = networks
+      networks = networks,
+      readinessChecks = app.readinessChecks.map(normalizeReadinessCheck)
     )
   }
 }

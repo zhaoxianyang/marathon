@@ -26,7 +26,7 @@ object ReadinessCheckTestHelper {
     portName = "dcos-migration-api",
     intervalSeconds = 10,
     timeoutSeconds = 2,
-    httpStatusCodesForReady = Seq(201),
-    preserveLastResponse = Some(true)
+    httpStatusCodesForReady = Set(201),
+    preserveLastResponse = true
   )
 }

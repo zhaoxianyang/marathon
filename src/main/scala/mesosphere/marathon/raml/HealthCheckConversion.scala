@@ -164,15 +164,16 @@ trait HealthCheckConversion {
   implicit val appHealthCheckRamlReader = Reads[AppHealthCheck, CoreHealthCheck] { check =>
     val result: CoreHealthCheck = check match {
       // TODO(jdef) raml lacks support for delay, maybe because marathon checks don't support it?
-      case AppHealthCheck(Some(command), grace, None, interval, failures, None, None, None, proto, timeout) =>
-        if (proto != AppHealthCheckProtocol.Command) // TODO(jdef) move this to validation
+      case AppHealthCheck(Some(command), grace, None, interval, failures, None, None, _, proto, timeout) =>
+        // we allow, but ignore, a port-index for backwards compatibility
+        if (proto != AppHealthCheckProtocol.Command) // validation should have failed this already
           throw SerializationFailedException(s"illegal protocol $proto specified with command")
         MesosCommandHealthCheck(
           gracePeriod = grace.seconds,
           interval = interval.seconds,
           timeout = timeout.seconds,
           maxConsecutiveFailures = failures,
-          command = Command(command.command)
+          command = Command(command.value)
         )
       case AppHealthCheck(None, grace, ignore1xx, interval, failures, path, port, index, proto, timeout) =>
         proto match {

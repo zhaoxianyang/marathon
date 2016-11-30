@@ -102,7 +102,7 @@ class ReadinessCheckIntegrationTest extends AkkaIntegrationFunTest with Embedded
         path = "/v1/plan",
         intervalSeconds = 2,
         timeoutSeconds = 1,
-        preserveLastResponse = Some(true)))
+        preserveLastResponse = true))
     )
   }
 

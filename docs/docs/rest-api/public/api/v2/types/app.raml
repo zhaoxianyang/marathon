@@ -240,7 +240,8 @@ types:
           allocated for every task. For every port definition with port number zero,
           a globally unique (cluster-wide) service port is assigned and provided as
           part of the app definition to be used in load balancing definitions.
-      readinessChecks?: readiness.ReadinessCheck[]
+      readinessChecks?:
+        type: readiness.ReadinessCheck[]
       residency?: AppResidency
       requirePorts?:
         type: boolean

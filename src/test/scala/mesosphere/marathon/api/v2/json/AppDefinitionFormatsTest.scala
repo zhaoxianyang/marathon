@@ -3,11 +3,9 @@ package api.v2.json
 
 import akka.Done
 import mesosphere.Unstable
-import mesosphere.marathon.Protos.Constraint
 import mesosphere.marathon.api.v2.AppNormalization
 import mesosphere.marathon.api.v2.Validation
 import mesosphere.marathon.api.v2.validation.AppValidation
-import mesosphere.marathon.core.health.HealthCheck
 import mesosphere.marathon.core.pod.ContainerNetwork
 import mesosphere.marathon.core.readiness.ReadinessCheckTestHelper
 import mesosphere.marathon.raml.Raml
@@ -25,9 +23,7 @@ class AppDefinitionFormatsTest
     extends MarathonSpec
     with AppAndGroupFormats
     with HealthCheckFormats
-    with Matchers
-    with FetchUriFormats
-    with SecretFormats {
+    with Matchers {
 
   import Formats.PathIdFormat
 
@@ -68,6 +64,7 @@ class AppDefinitionFormatsTest
   test("ToJson") {
     import AppDefinition._
     import Fixture._
+    import mesosphere.marathon.raml._
 
     val r1 = Json.toJson(a1)
     // check supplied values
@@ -86,20 +83,20 @@ class AppDefinitionFormatsTest
     (r1 \ "disk").as[Double] should equal (DefaultDisk)
     (r1 \ "gpus").as[Int] should equal (DefaultGpus)
     (r1 \ "executor").as[String] should equal (DefaultExecutor)
-    (r1 \ "constraints").as[Set[Constraint]] should equal (DefaultConstraints)
-    (r1 \ "fetch").as[Seq[FetchUri]] should equal (DefaultFetch)
+    (r1 \ "constraints").as[Set[Seq[String]]] should equal (DefaultConstraints.map(_.toRaml[Seq[String]]))
+    (r1 \ "fetch").as[Seq[raml.Artifact]] should equal (DefaultFetch.map(_.toRaml))
     (r1 \ "storeUrls").as[Seq[String]] should equal (DefaultStoreUrls)
-    (r1 \ "portDefinitions").as[Seq[PortDefinition]] should equal (DefaultPortDefinitions)
+    (r1 \ "portDefinitions").asOpt[Seq[raml.PortDefinition]] should equal (None)
     (r1 \ "requirePorts").as[Boolean] should equal (DefaultRequirePorts)
     (r1 \ "backoffSeconds").as[Long] should equal (DefaultBackoff.toSeconds)
     (r1 \ "backoffFactor").as[Double] should equal (DefaultBackoffFactor)
     (r1 \ "maxLaunchDelaySeconds").as[Long] should equal (DefaultMaxLaunchDelay.toSeconds)
     (r1 \ "container").asOpt[String] should equal (None)
-    (r1 \ "healthChecks").as[Set[HealthCheck]] should equal (DefaultHealthChecks)
+    (r1 \ "healthChecks").as[Seq[raml.AppHealthCheck]] should equal (Raml.toRaml(DefaultHealthChecks))
     (r1 \ "dependencies").as[Set[PathId]] should equal (DefaultDependencies)
-    (r1 \ "upgradeStrategy").as[UpgradeStrategy] should equal (DefaultUpgradeStrategy)
+    (r1 \ "upgradeStrategy").as[UpgradeStrategy] should equal (DefaultUpgradeStrategy.toRaml)
     (r1 \ "residency").asOpt[String] should equal (None)
-    (r1 \ "secrets").as[Map[String, Secret]] should equal (DefaultSecrets)
+    (r1 \ "secrets").as[Map[String, raml.SecretDef]] should equal (DefaultSecrets.toRaml)
     (r1 \ "taskKillGracePeriodSeconds").asOpt[Long] should equal (DefaultTaskKillGracePeriod)
   }
 

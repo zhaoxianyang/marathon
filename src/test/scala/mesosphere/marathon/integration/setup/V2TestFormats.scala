@@ -6,6 +6,8 @@ import mesosphere.marathon.core.pod.PodDefinition
 import mesosphere.marathon.raml.{ App, Raml }
 import mesosphere.marathon.state.{ AppDefinition, Group, PathId, RootGroup, Timestamp }
 import mesosphere.marathon.upgrade.DeploymentPlan
+import org.apache.mesos.{ Protos => mesos }
+import play.api.libs.functional.syntax._
 import play.api.libs.json._
 
 /**
@@ -40,13 +42,36 @@ object V2TestFormats {
     )
   }
 
+  implicit lazy val networkInfoProtocolReads = Reads[mesos.NetworkInfo.Protocol] { json =>
+    val allowedProtocolString = mesos.NetworkInfo.Protocol.values().toSeq.map(
+      _.getDescriptorForType.getName).mkString(", ")
+
+    json.validate[String].flatMap { protocolString: String =>
+
+      Option(mesos.NetworkInfo.Protocol.valueOf(protocolString)) match {
+        case Some(protocol) => JsSuccess(protocol)
+        case None =>
+          JsError(s"'$protocolString' is not a valid protocol. Allowed values: $allowedProtocolString")
+      }
+    }
+  }
+
+  implicit lazy val ipAddressReads: Reads[mesos.NetworkInfo.IPAddress] = {
+
+    def toIpAddress(ipAddress: String, protocol: mesos.NetworkInfo.Protocol): mesos.NetworkInfo.IPAddress =
+      mesos.NetworkInfo.IPAddress.newBuilder().setIpAddress(ipAddress).setProtocol(protocol).build()
+
+    (
+      (__ \ "ipAddress").read[String] ~
+      (__ \ "protocol").read[mesos.NetworkInfo.Protocol]
+    )(toIpAddress _)
+  }
+
   implicit lazy val SubscribeReads: Reads[Subscribe] = Json.reads[Subscribe]
   implicit lazy val UnsubscribeReads: Reads[Unsubscribe] = Json.reads[Unsubscribe]
   implicit lazy val EventStreamAttachedReads: Reads[EventStreamAttached] = Json.reads[EventStreamAttached]
   implicit lazy val EventStreamDetachedReads: Reads[EventStreamDetached] = Json.reads[EventStreamDetached]
-  implicit lazy val AddHealthCheckReads: Reads[AddHealthCheck] = Json.reads[AddHealthCheck]
   implicit lazy val RemoveHealthCheckReads: Reads[RemoveHealthCheck] = Json.reads[RemoveHealthCheck]
-  implicit lazy val FailedHealthCheckReads: Reads[FailedHealthCheck] = Json.reads[FailedHealthCheck]
   implicit lazy val HealthStatusChangedReads: Reads[HealthStatusChanged] = Json.reads[HealthStatusChanged]
   implicit lazy val GroupChangeSuccessReads: Reads[GroupChangeSuccess] = Json.reads[GroupChangeSuccess]
   implicit lazy val GroupChangeFailedReads: Reads[GroupChangeFailed] = Json.reads[GroupChangeFailed]

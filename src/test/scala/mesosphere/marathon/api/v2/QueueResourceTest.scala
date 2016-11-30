@@ -9,6 +9,7 @@ import mesosphere.marathon.core.launchqueue.LaunchQueue.{ QueuedInstanceInfo, Qu
 import mesosphere.marathon.raml.{ App, Raml }
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state.AppDefinition
+import mesosphere.marathon.stream._
 import mesosphere.marathon.test.{ MarathonSpec, MarathonTestHelper, Mockito }
 import mesosphere.mesos.NoOfferMatchReason
 import org.scalatest.{ GivenWhenThen, Matchers }
@@ -78,7 +79,7 @@ class QueueResourceTest extends MarathonSpec with Matchers with Mockito with Giv
       )
     )
     //when
-    val response = queueResource.index(auth.request, Set.empty)
+    val response = queueResource.index(auth.request, Set.empty[String])
 
     //then
     response.getStatus should be(200)
@@ -127,7 +128,7 @@ class QueueResourceTest extends MarathonSpec with Matchers with Mockito with Giv
     val req = auth.request
 
     When("the index is fetched")
-    val index = queueResource.index(req, Set.empty)
+    val index = queueResource.index(req, Set.empty[String])
     Then("we receive a NotAuthenticated response")
     index.getStatus should be(auth.NotAuthenticatedStatus)
 

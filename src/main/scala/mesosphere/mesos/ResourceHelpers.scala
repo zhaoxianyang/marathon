@@ -5,14 +5,16 @@ import mesosphere.mesos.protos.Resource
 import org.apache.mesos.Protos
 import org.apache.mesos.Protos.Resource.DiskInfo.Source
 
+import scala.collection.immutable.Seq
+
 // TODO - put this somewhere sensible
 object ResourceHelpers {
-  import mesosphere.marathon.api.v2.json.Formats.ConstraintFormat
 
   def requestedStringification(requested: Either[Double, PersistentVolume]): String = requested match {
     case Left(value) => s"disk:root:$value"
     case Right(vol) =>
-      val constraintsJson = vol.persistent.constraints.map(ConstraintFormat.writes).toList
+      import mesosphere.marathon.raml._
+      val constraintsJson: Seq[Seq[String]] = vol.persistent.constraints.map(_.toRaml[Seq[String]])(collection.breakOut)
       s"disk:${vol.persistent.`type`.toString}:${vol.persistent.size}:[${constraintsJson.mkString(",")}]"
   }
 

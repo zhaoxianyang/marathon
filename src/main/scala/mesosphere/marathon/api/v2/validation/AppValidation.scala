@@ -388,8 +388,15 @@ trait AppValidation {
 
   val complyWithConstraintRules: Validator[Seq[String]] = new Validator[Seq[String]] {
     import Protos.Constraint.Operator._
+
+    def failureIllegalOperator(c: Any) = Failure(Set(
+      RuleViolation(
+        c,
+        "Constraint operator must be one of the following UNIQUE, CLUSTER, GROUP_BY, LIKE, MAX_PER or UNLIKE", None)))
+
     override def apply(c: Seq[String]): Result = {
-      (c.headOption, c.lift(1), c.lift(2)) match {
+      if (c.length < 2 || c.length > 3) Failure(Set(RuleViolation(c, "Each constraint must have either 2 or 3 fields", None)))
+      else (c.headOption, c.lift(1), c.lift(2)) match {
         case (None, None, _) =>
           Failure(Set(RuleViolation(c, "Missing field and operator", None)))
         case (Some(field), Some(op), value) =>
@@ -418,11 +425,10 @@ trait AppValidation {
                       Failure(Set(RuleViolation(c, "Value was specified but is not a number", Some("MAX_PER may have an integer value")))))
                   }
                 case _ =>
-                  Failure(Set(
-                    RuleViolation(c, "Operator must be one of UNIQUE, CLUSTER, GROUP_BY, LIKE, MAX_PER or UNLIKE", None)))
+                  failureIllegalOperator(c)
               }
             case _ =>
-              Failure(Set(RuleViolation(c, s"illegal constraint operator $op", None)))
+              failureIllegalOperator(c)
           }
         case _ =>
           Failure(Set(RuleViolation(c, s"illegal constraint specification ${c.mkString(",")}", None)))

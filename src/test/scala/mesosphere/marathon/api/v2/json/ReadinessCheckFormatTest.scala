@@ -1,12 +1,21 @@
 package mesosphere.marathon
 package api.v2.json
 
-import mesosphere.marathon.core.readiness.{ ReadinessCheckTestHelper, ReadinessCheck }
+import mesosphere.marathon.api.v2.AppNormalization
+import mesosphere.marathon.core.readiness.{ ReadinessCheck, ReadinessCheckTestHelper }
+import mesosphere.marathon.raml.Raml
 import org.scalatest.{ FunSuite, GivenWhenThen, Matchers }
-import play.api.libs.json.{ JsObject, Json }
+import play.api.libs.json._
 
 class ReadinessCheckFormatTest extends FunSuite with Matchers with GivenWhenThen {
-  import Formats._
+
+  implicit val readinessCheckReads: Reads[ReadinessCheck] = Reads { js =>
+    JsSuccess(Raml.fromRaml(AppNormalization.normalizeReadinessCheck(js.as[raml.ReadinessCheck])))
+  }
+
+  implicit val readinessCheckWrites: Writes[ReadinessCheck] = Writes { check =>
+    raml.ReadinessCheck.playJsonFormat.writes(Raml.toRaml(check))
+  }
 
   test("if we read empty JSON object, we use default values") {
     Given("an empty Json Object")

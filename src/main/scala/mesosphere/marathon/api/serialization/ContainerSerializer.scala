@@ -5,6 +5,7 @@ import mesosphere.marathon.core.externalvolume.ExternalVolumes
 import mesosphere.marathon.state.Container.PortMapping
 import mesosphere.marathon.state._
 import mesosphere.marathon.stream._
+import mesosphere.mesos.protos._
 import org.apache.mesos
 
 object ContainerSerializer {
@@ -71,10 +72,9 @@ object ContainerSerializer {
       case dv: DockerVolume => builder.addVolumes(VolumeSerializer.toMesos(dv))
     }
 
-    val networkInfos = container.portMappings.map { mapping =>
-      val labels = mapping.labels.map { case (k, v) => mesos.Protos.Label.newBuilder.setKey(k).setValue(v).build() }
+    val networkInfos = container.portMappings.withFilter(_.hostPort.nonEmpty).map { mapping =>
       val builder = mesos.Protos.NetworkInfo.newBuilder
-      builder.setLabels(mesos.Protos.Labels.newBuilder().addAllLabels(labels).build())
+      builder.setLabels(mapping.labels.toMesosLabels)
       val portBuilder = builder.addPortMappingsBuilder().setContainerPort(mapping.containerPort)
         .setProtocol(mapping.protocol)
       mapping.hostPort.foreach(portBuilder.setHostPort)

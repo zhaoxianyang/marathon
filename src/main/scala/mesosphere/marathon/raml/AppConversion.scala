@@ -2,9 +2,7 @@ package mesosphere.marathon
 package raml
 
 import mesosphere.marathon.Protos.ResidencyDefinition
-import mesosphere.marathon.core.readiness.{ ReadinessCheck => CoreReadinessCheck }
 import mesosphere.marathon.state._
-import java.time.OffsetDateTime
 
 import scala.concurrent.duration._
 
@@ -27,10 +25,10 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
     AppResidency(residency.relaunchEscalationTimeoutSeconds.toInt, residency.taskLostBehavior.toRaml)
   }
 
-  implicit val versionInfoWrites: Writes[state.VersionInfo, VersionInfo] = Writes {
-    case state.VersionInfo.FullVersionInfo(_, scale, config) => VersionInfo(scale.toOffsetDateTime, config.toOffsetDateTime)
-    case state.VersionInfo.OnlyVersion(version) => VersionInfo(version.toOffsetDateTime, version.toOffsetDateTime)
-    case state.VersionInfo.NoVersion => VersionInfo(OffsetDateTime.now(), OffsetDateTime.now())
+  implicit val versionInfoWrites: Writes[state.VersionInfo, Option[VersionInfo]] = Writes {
+    case state.VersionInfo.FullVersionInfo(_, scale, config) => Some(VersionInfo(scale.toOffsetDateTime, config.toOffsetDateTime))
+    case state.VersionInfo.OnlyVersion(version) => None
+    case state.VersionInfo.NoVersion => None
   }
 
   implicit val parameterWrites: Writes[state.Parameter, DockerParameter] = Writes { param =>
@@ -180,24 +178,6 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
     result
   }
 
-  implicit val appReadinessRamlReader = Reads[ReadinessCheck, CoreReadinessCheck] { check =>
-    val protocol = check.protocol match {
-      case HttpScheme.Http => CoreReadinessCheck.Protocol.HTTP
-      case HttpScheme.Https => CoreReadinessCheck.Protocol.HTTPS
-    }
-    val result: CoreReadinessCheck = CoreReadinessCheck(
-      name = check.name,
-      protocol = protocol,
-      path = check.path,
-      portName = check.portName,
-      interval = check.intervalSeconds.seconds,
-      timeout = check.timeoutSeconds.seconds,
-      httpStatusCodesForReady = check.httpStatusCodesForReady.toSet,
-      preserveLastResponse = check.preserveLastResponse.getOrElse(CoreReadinessCheck.DefaultPreserveLastResponse)
-    )
-    result
-  }
-
   implicit val upgradeStrategyRamlReader = Reads[UpgradeStrategy, state.UpgradeStrategy] { us =>
     state.UpgradeStrategy(
       maximumOverCapacity = us.maximumOverCapacity,
@@ -242,7 +222,7 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
       container = app.container.map(Raml.fromRaml(_)),
       healthChecks = app.healthChecks.map(Raml.fromRaml(_)).toSet,
       readinessChecks = app.readinessChecks.map(Raml.fromRaml(_)),
-      taskKillGracePeriod = app.taskKillGracePeriodSeconds.map(_.second).orElse(AppDefinition.DefaultTaskKillGracePeriod),
+      taskKillGracePeriod = app.taskKillGracePeriodSeconds.map(_.second),
       dependencies = app.dependencies.map(PathId(_))(collection.breakOut),
       upgradeStrategy = selectedStrategy.upgradeStrategy,
       labels = app.labels,

@@ -26,7 +26,7 @@ class QueueResource @Inject() (
   @GET
   @Timed
   @Produces(Array(MarathonMediaType.PREFERRED_APPLICATION_JSON))
-  def index(@Context req: HttpServletRequest, @QueryParam("embed") embed: Set[String]): Response = authenticated(req) { implicit identity =>
+  def index(@Context req: HttpServletRequest, @QueryParam("embed") embed: java.util.Set[String]): Response = authenticated(req) { implicit identity =>
     val embedLastUnusedOffers = embed.contains(QueueResource.EmbedLastUnusedOffers)
     val infos = launchQueue.listWithStatistics.filter(t => t.inProgress && isAuthorized(ViewRunSpec, t.runSpec))
     ok(Raml.toRaml((infos, embedLastUnusedOffers, clock)))
