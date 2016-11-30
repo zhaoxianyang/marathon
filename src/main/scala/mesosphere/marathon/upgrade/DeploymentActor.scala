@@ -149,7 +149,7 @@ private class DeploymentActor(
     }
 
     val ScalingProposition(tasksToKill, tasksToStart) = ScalingProposition.propose(
-      runningInstances, toKill, killToMeetConstraints, scaleTo)
+      runningInstances, toKill, killToMeetConstraints, scaleTo, runnableSpec.unreachableStrategy.killSelection)
 
     def killTasksIfNeeded: Future[Unit] = {
       log.debug("Kill tasks if needed")

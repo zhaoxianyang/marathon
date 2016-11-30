@@ -506,8 +506,8 @@ class SchedulerActions(
   @SuppressWarnings(Array("all")) // async/await
   def reconcileHealthChecks(): Unit = {
     async { // linter:ignore UnnecessaryElseBranch
-      val group = await(groupRepository.root())
-      val runSpecs = group.transitiveRunSpecsById.keys
+      val rootGroup = await(groupRepository.root())
+      val runSpecs = rootGroup.transitiveRunSpecsById.keys
       runSpecs.foreach(healthCheckManager.reconcileWith)
     }
   }
@@ -526,7 +526,8 @@ class SchedulerActions(
 
     val targetCount = runSpec.instances
 
-    val ScalingProposition(tasksToKill, tasksToStart) = ScalingProposition.propose(runningTasks, None, killToMeetConstraints, targetCount)
+    val ScalingProposition(tasksToKill, tasksToStart) = ScalingProposition.propose(
+      runningTasks, None, killToMeetConstraints, targetCount, runSpec.unreachableStrategy.killSelection)
 
     tasksToKill.foreach { tasks: Seq[Instance] =>
       log.info(s"Scaling ${runSpec.id} from ${runningTasks.size} down to $targetCount instances")

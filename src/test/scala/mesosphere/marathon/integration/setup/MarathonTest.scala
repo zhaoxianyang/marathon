@@ -17,8 +17,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
 import com.typesafe.scalalogging.StrictLogging
-import mesosphere.marathon.core.health.{ HealthCheck, MarathonHttpHealthCheck, PortReference }
-import mesosphere.marathon.integration.facades.{ ITDeploymentResult, ITEnrichedTask, ITLeaderResult, MarathonFacade, MesosFacade }
+import mesosphere.marathon.api.RestResource
+import mesosphere.marathon.core.health.{ HealthCheck, MarathonHealthCheck, MarathonHttpHealthCheck, PortReference }
+import mesosphere.marathon.integration.facades.{ ITEnrichedTask, ITLeaderResult, MarathonFacade, MesosFacade }
 import mesosphere.marathon.raml.{ PodState, PodStatus, Resources }
 import mesosphere.marathon.state.{ AppDefinition, Container, DockerVolume, PathId }
 import mesosphere.marathon.test.ExitDisabledTest
@@ -27,7 +28,8 @@ import mesosphere.util.PortAllocator
 import org.apache.commons.io.FileUtils
 import org.apache.mesos.Protos
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.concurrent.{ Eventually, ScalaFutures }
+import org.scalatest.time.{ Milliseconds, Span }
 import org.scalatest.{ BeforeAndAfterAll, Suite }
 import play.api.libs.json.{ JsString, Json }
 
@@ -121,7 +123,7 @@ case class LocalMarathon(
   }
 
   private def create(): Process = {
-    processBuilder.run(ProcessOutputToLogStream("LocalMarathon"))
+    processBuilder.run(ProcessOutputToLogStream(s"LocalMarathon-$httpPort"))
   }
 
   def start(): Future[Done] = {
@@ -129,7 +131,7 @@ case class LocalMarathon(
       marathon = Some(create())
     }
     val port = conf.get("http_port").orElse(conf.get("https_port")).map(_.toInt).getOrElse(httpPort)
-    val future = Retry(s"marathon-$port", Int.MaxValue, 1.milli, 5.seconds) {
+    val future = Retry(s"marathon-$port", maxAttempts = Int.MaxValue, minDelay = 1.milli, maxDelay = 5.seconds, maxDuration = 45.seconds) {
       async {
         val result = await(Http(system).singleRequest(Get(s"http://localhost:$port/v2/leader")))
         if (result.status.isSuccess()) { // linter:ignore //async/await
@@ -166,7 +168,7 @@ case class LocalMarathon(
   * base trait that spins up/tears down a marathon and has all of the original tooling from
   * SingleMarathonIntegrationTest.
   */
-trait MarathonTest extends Suite with StrictLogging with ScalaFutures with BeforeAndAfterAll {
+trait MarathonTest extends Suite with StrictLogging with ScalaFutures with BeforeAndAfterAll with Eventually {
   def marathonUrl: String
   def marathon: MarathonFacade
   def mesos: MesosFacade
@@ -283,12 +285,14 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
     s"""$javaExecutable -Xmx64m -DappProxyId=$id -DtestSuite=$suiteName -classpath $classPath $main"""
   }
 
-  lazy val appProxyHealthChecks = Set(
-    MarathonHttpHealthCheck(gracePeriod = 3.second, interval = 1.second, maxConsecutiveFailures = 2,
-      portIndex = Some(PortReference.ByIndex(0))))
+  def appProxyHealthCheck(
+    gracePeriod: FiniteDuration = 3.seconds,
+    interval: FiniteDuration = 1.second,
+    maxConsecutiveFailures: Int = Int.MaxValue,
+    portIndex: Option[PortReference] = Some(PortReference.ByIndex(0))): MarathonHealthCheck =
+    MarathonHttpHealthCheck(gracePeriod = gracePeriod, interval = interval, maxConsecutiveFailures = maxConsecutiveFailures, portIndex = portIndex)
 
-  def appProxy(appId: PathId, versionId: String, instances: Int,
-    withHealth: Boolean = true, dependencies: Set[PathId] = Set.empty): AppDefinition = {
+  def appProxy(appId: PathId, versionId: String, instances: Int, healthCheck: Option[HealthCheck] = Some(appProxyHealthCheck()), dependencies: Set[PathId] = Set.empty): AppDefinition = {
 
     val appProxyMainInvocation: String = {
       val file = File.createTempFile("appProxy", ".sh")
@@ -312,7 +316,7 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
       executor = "//cmd",
       instances = instances,
       resources = Resources(cpus = 0.5, mem = 128.0),
-      healthChecks = if (withHealth) appProxyHealthChecks else Set.empty[HealthCheck],
+      healthChecks = healthCheck.toSet,
       dependencies = dependencies
     )
   }
@@ -328,15 +332,16 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
     val id = UUID.randomUUID.toString
     appProxyIds(_ += id)
     val main = classOf[AppMock].getName
-    s"""java -Xmx64m -classpath -DappProxyId=$id -DtestSuite=$suiteName $classPath $main"""
+    s"""java -Xmx64m -DappProxyId=$id -DtestSuite=$suiteName -classpath $classPath $main"""
   }
 
   def appProxyCommand(appId: PathId, versionId: String, containerDir: String, port: String) = {
     val appProxy = appProxyMainInvocationExternal(containerDir)
-    s"""echo APP PROXY $$MESOS_TASK_ID RUNNING; $appProxy $port $appId $versionId $marathonUrl/health$appId/$versionId"""
+    s"""echo APP PROXY $$MESOS_TASK_ID RUNNING; $appProxy """ +
+      s"""$port $appId $versionId http://127.0.0.1:${callbackEndpoint.localAddress.getPort}/health$appId/$versionId"""
   }
 
-  def dockerAppProxy(appId: PathId, versionId: String, instances: Int, withHealth: Boolean = true, dependencies: Set[PathId] = Set.empty): AppDefinition = {
+  def dockerAppProxy(appId: PathId, versionId: String, instances: Int, healthCheck: Option[HealthCheck] = Some(appProxyHealthCheck()), dependencies: Set[PathId] = Set.empty): AppDefinition = {
     val projectDir = sys.props.getOrElse("user.dir", ".")
     val homeDir = sys.props.getOrElse("user.home", "~")
     val containerDir = "/opt/marathon"
@@ -356,26 +361,30 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
       )),
       instances = instances,
       resources = Resources(cpus = 0.5, mem = 128.0),
-      healthChecks = if (withHealth) appProxyHealthChecks else Set.empty[HealthCheck],
+      healthChecks = healthCheck.toSet,
       dependencies = dependencies
     )
   }
 
   def waitForTasks(appId: PathId, num: Int, maxWait: FiniteDuration = patienceConfig.timeout.toMillis.millis): List[ITEnrichedTask] = {
-    def checkTasks: Option[List[ITEnrichedTask]] = {
+    eventually(timeout(Span(maxWait.toMillis, Milliseconds))) {
       val tasks = Try(marathon.tasks(appId)).map(_.value).getOrElse(Nil).filter(_.launched)
-      if (tasks.size == num) Some(tasks) else None
+      require(tasks.size == num, s"Waiting for $num tasks to be launched")
+      tasks
     }
-    WaitTestSupport.waitFor(s"$num tasks to launch", maxWait)(checkTasks)
   }
 
   def cleanUp(withSubscribers: Boolean = false): Unit = {
     logger.info("Starting to CLEAN UP !!!!!!!!!!")
     events.clear()
 
-    def deleteResult(): RestResult[ITDeploymentResult] = marathon.deleteGroup(testBasePath, force = true)
-    if (deleteResult().code != 404) {
-      waitForChange(deleteResult())
+    // Wait for a clean slate in Marathon, if there is a running deployment or a runSpec exists
+    logger.info("Clean Marathon State")
+    lazy val group = marathon.group(testBasePath).value
+    lazy val deployments = marathon.listDeploymentsForBaseGroup().value
+    if (deployments.nonEmpty || group.transitiveRunSpecs.nonEmpty || group.transitiveGroupsById.nonEmpty) {
+      //do not fail here, since the require statements will ensure a correct setup and fail otherwise
+      Try(waitForDeployment(eventually(marathon.deleteGroup(testBasePath, force = true))))
     }
 
     WaitTestSupport.waitUntil("clean slate in Mesos", patienceConfig.timeout.toMillis.millis) {
@@ -444,16 +453,20 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
     description: String,
     maxWait: FiniteDuration = patienceConfig.timeout.toMillis.millis)(fn: CallbackEvent => Boolean): CallbackEvent = {
     @tailrec
-    def nextEvent: Option[CallbackEvent] = if (events.isEmpty) None else {
+    def matchingEvent: Option[CallbackEvent] = if (events.isEmpty) None else {
       val event = events.poll()
       if (fn(event)) {
         Some(event)
       } else {
         logger.info(s"Event $event did not match criteria skipping to next event")
-        nextEvent
+        matchingEvent
       }
     }
-    WaitTestSupport.waitFor(description, maxWait)(nextEvent)
+
+    eventually(timeout(Span(maxWait.toMillis, Milliseconds))) {
+      require(!events.isEmpty, s"No events matched <$description>")
+      matchingEvent.getOrElse(throw new RuntimeException("No matching events"))
+    }
   }
 
   /**
@@ -486,15 +499,15 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
     receivedEventsForKinds.groupBy(_.eventType)
   }
 
-  def waitForChange(change: RestResult[ITDeploymentResult], maxWait: FiniteDuration = patienceConfig.timeout.toMillis.millis): CallbackEvent = {
-    waitForDeploymentId(change.value.deploymentId, maxWait)
+  def waitForDeployment(change: RestResult[_], maxWait: FiniteDuration = patienceConfig.timeout.toMillis.millis): CallbackEvent = {
+    val deploymentId = change.originalResponse.headers.find(_.name == RestResource.DeploymentHeader).getOrElse(throw new IllegalArgumentException("No deployment id found in Http Header"))
+    waitForDeploymentId(deploymentId.value, maxWait)
   }
 
-  def waitForPod(podId: PathId, maxWait: FiniteDuration = patienceConfig.timeout.toMillis.millis): PodStatus = {
-    def checkPods = {
-      Try(marathon.status(podId)).map(_.value).toOption.filter(_.status == PodState.Stable)
+  def waitForPod(podId: PathId): PodStatus = {
+    eventually {
+      Try(marathon.status(podId)).map(_.value).toOption.filter(_.status == PodState.Stable).get
     }
-    WaitTestSupport.waitFor(s"Pod $podId to launch", maxWait)(checkPods)
   }
 }
 
