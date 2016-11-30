@@ -246,7 +246,7 @@ class AppsResource @Inject() (
     deploymentResult(restartDeployment)
   }
 
-  private def updateOrCreate(
+  private[v2] def updateOrCreate(
     appId: PathId,
     existing: Option[AppDefinition],
     appUpdate: raml.AppUpdate)(implicit identity: Identity): AppDefinition = {

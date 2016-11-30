@@ -14,7 +14,7 @@ import mesosphere.marathon.core.health.HealthCheckManager
 import mesosphere.marathon.core.pod.ContainerNetwork
 import mesosphere.marathon.core.plugin.PluginManager
 import mesosphere.marathon.core.task.tracker.InstanceTracker
-import mesosphere.marathon.raml.{ App, ContainerPortMapping, DockerContainer, DockerNetwork, EngineType, EnvVarValueOrSecret, IpAddress, IpDiscovery, IpDiscoveryPort, Network, NetworkMode, Raml, SecretDef }
+import mesosphere.marathon.raml.{ App, AppUpdate, ContainerPortMapping, DockerContainer, DockerNetwork, EngineType, EnvVarValueOrSecret, IpAddress, IpDiscovery, IpDiscoveryPort, Network, NetworkMode, Raml, SecretDef }
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state._
 import mesosphere.marathon.storage.repository.{ AppRepository, GroupRepository, TaskFailureRepository }
@@ -1206,6 +1206,23 @@ class AppsResourceTest extends MarathonSpec with MarathonActorSupport with Match
 
     Then("A 404 is returned")
     intercept[UnknownAppException] { appsResource.delete(false, "/foo", req) }
+  }
+
+  test("AppUpdate does not change existing versionInfo") {
+    implicit val identity = auth.identity
+    val app = AppDefinition(
+      id = PathId("test"),
+      cmd = Some("sleep 1"),
+      versionInfo = VersionInfo.forNewConfig(Timestamp(1))
+    )
+
+    val updateCmd = AppUpdate(cmd = Some("sleep 2"))
+    val updatedApp = appsResource.updateOrCreate(
+      appId = app.id,
+      existing = Some(app),
+      appUpdate = updateCmd
+    )
+    assert(updatedApp.versionInfo == app.versionInfo)
   }
 
   var clock: ConstantClock = _

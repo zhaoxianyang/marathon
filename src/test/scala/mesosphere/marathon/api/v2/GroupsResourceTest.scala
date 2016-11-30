@@ -260,7 +260,7 @@ class GroupsResourceTest extends MarathonSpec with Matchers with Mockito with Gi
 
   before {
     auth = new TestAuthFixture
-    config = AllConf.withTestConfig("--zk_timeout", "1000")
+    config = AllConf.withTestConfig("--zk_timeout", "10000") // 10s seems reasonable on a busy CI system
     groupManager = mock[GroupManager]
     groupInfo = mock[GroupInfoService]
     groupsResource = new GroupsResource(groupManager, groupInfo, config)(auth.auth, auth.auth)

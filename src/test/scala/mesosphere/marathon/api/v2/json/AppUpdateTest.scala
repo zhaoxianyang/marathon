@@ -229,19 +229,6 @@ class AppUpdateTest extends MarathonSpec with Matchers {
     assert(changed == app.copy(acceptedResourceRoles = Set("b")))
   }
 
-  test("AppUpdate does not change existing versionInfo", Unstable) {
-    // TODO(jdef) marked unstable but it really needs moving to AppsResourceTest, and should test that code for
-    // preserving the version (see updateOrCreate)
-    val app = AppDefinition(
-      id = PathId("test"),
-      cmd = Some("sleep 1"),
-      versionInfo = VersionInfo.forNewConfig(Timestamp(1))
-    )
-
-    val updateCmd = AppUpdate(cmd = Some("sleep 2"))
-    assert(Raml.fromRaml(Raml.fromRaml((updateCmd, app))).versionInfo == app.versionInfo)
-  }
-
   test("AppUpdate with a version and other changes are not allowed") {
     val vfe = intercept[ValidationFailedException](validateOrThrow(
       AppUpdate(id = Some("/test"), cmd = Some("sleep 2"), version = Some(Timestamp(2).toOffsetDateTime))))
