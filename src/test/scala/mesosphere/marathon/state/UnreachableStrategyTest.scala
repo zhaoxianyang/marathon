@@ -3,10 +3,11 @@ package state
 
 import mesosphere.UnitTest
 import mesosphere.marathon.state.UnreachableStrategy.KillSelection.{ OldestFirst, YoungestFirst }
+import com.wix.accord.scalatest.ResultMatchers
 
 import scala.concurrent.duration._
 
-class UnreachableStrategyTest extends UnitTest {
+class UnreachableStrategyTest extends UnitTest with ResultMatchers {
 
   "UnreachableStrategy.KillSelection" should {
 
@@ -44,17 +45,17 @@ class UnreachableStrategyTest extends UnitTest {
   "UnreachableStrategy.unreachableStrategyValidator" should {
     "validate default strategy" in {
       val strategy = UnreachableStrategy()
-      UnreachableStrategy.unreachableStrategyValidator(strategy).isSuccess should be(true)
+      UnreachableStrategy.unreachableStrategyValidator(strategy) shouldBe aSuccess
     }
 
     "fail with invalid time until inactive" in {
-      val strategy = UnreachableStrategy(timeUntilInactive = 0.seconds)
-      UnreachableStrategy.unreachableStrategyValidator(strategy).isSuccess should be(false)
+      val strategy = UnreachableStrategy(timeUntilInactive = 0.second)
+      UnreachableStrategy.unreachableStrategyValidator(strategy) should failWith("timeUntilInactive" -> "got 0 seconds, expected 1 second or more")
     }
 
     "fail when time until expunge is smaller" in {
       val strategy = UnreachableStrategy(timeUntilInactive = 2.seconds, timeUntilExpunge = 1.second)
-      UnreachableStrategy.unreachableStrategyValidator(strategy).isSuccess should be(false)
+      UnreachableStrategy.unreachableStrategyValidator(strategy) should failWith("timeUntilInactive" -> "got 2 seconds, expected less than 1 second")
     }
   }
 }
