@@ -109,7 +109,7 @@ class AppUpdateValidatorTest extends UnitTest with Matchers {
           |}
         """.stripMargin).as[AppUpdate]), AppNormalization.Config(None))
 
-      assert(validate(Raml.fromRaml(appUpdate -> appDef)).isSuccess)
+      assert(validate(Raml.fromRaml(Raml.fromRaml(appUpdate -> appDef))).isSuccess)
     }
   }
 

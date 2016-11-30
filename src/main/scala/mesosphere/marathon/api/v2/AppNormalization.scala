@@ -174,6 +174,10 @@ trait AppNormalization {
     if (check.httpStatusCodesForReady.nonEmpty) check
     else check.copy(httpStatusCodesForReady = core.readiness.ReadinessCheck.DefaultHttpStatusCodesForReady)
 
+  def maybeDropPortMappings(c: Container, networks: Seq[Network]): Container =
+    // empty networks Seq defaults to host-mode later on, so consider it now as indicating host-mode networking
+    if (networks.exists(_.mode == NetworkMode.Host) || networks.isEmpty) c.copy(portMappings = Nil) else c
+
   /**
     * only deprecated fields and their interaction with canonical fields have been validated so far,
     * so we limit normalization here to translating from the deprecated API to the canonical one.
@@ -190,13 +194,19 @@ trait AppNormalization {
       if (app.networks.isEmpty) None else Some(app.networks)
     )).getOrElse(Nil)
 
+    // canonical validation doesn't allow both portDefinitions and container.portMappings:
+    // container and portDefinitions normalization (below) deal with dropping unsupported port configs.
+
     // no container specified in JSON but ipAddress is ==> implies empty Mesos container
     val container = app.container.orElse(app.ipAddress.map(_ => Container(EngineType.Mesos))).map { c =>
-      dropDockerNetworks(
-        migrateIpDiscovery(
-          migrateDockerPortMappings(c),
-          app.ipAddress.flatMap(_.discovery)
-        )
+      maybeDropPortMappings(
+        dropDockerNetworks(
+          migrateIpDiscovery(
+            migrateDockerPortMappings(c),
+            app.ipAddress.flatMap(_.discovery)
+          )
+        ),
+        networks
       )
     }
 

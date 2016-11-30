@@ -94,6 +94,11 @@ case class AppDefinition(
     (!networks.exists(!_.eq(HostNetwork))) || portDefinitions.isEmpty,
     s"non-host-mode networking ($networks) and ports/portDefinitions ($portDefinitions) are not allowed at the same time")
 
+  require(
+    !(portDefinitions.nonEmpty && container.fold(false)(_.portMappings.nonEmpty)),
+    "portDefinitions and container.portMappings are not allowed at the same time"
+  )
+
   val portNumbers: Seq[Int] = portDefinitions.map(_.port)
 
   val isResident: Boolean = residency.isDefined

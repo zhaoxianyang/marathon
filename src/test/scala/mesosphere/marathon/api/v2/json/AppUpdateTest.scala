@@ -222,14 +222,16 @@ class AppUpdateTest extends MarathonSpec with Matchers {
   test("acceptedResourceRoles of update is only applied when != None") {
     val app = AppDefinition(id = PathId("withAcceptedRoles"), acceptedResourceRoles = Set("a"))
 
-    val unchanged = Raml.fromRaml((AppUpdate(), app)).copy(versionInfo = app.versionInfo)
+    val unchanged = Raml.fromRaml(Raml.fromRaml((AppUpdate(), app))).copy(versionInfo = app.versionInfo)
     assert(unchanged == app)
 
-    val changed = Raml.fromRaml((AppUpdate(acceptedResourceRoles = Some(Set("b"))), app)).copy(versionInfo = app.versionInfo)
+    val changed = Raml.fromRaml(Raml.fromRaml((AppUpdate(acceptedResourceRoles = Some(Set("b"))), app))).copy(versionInfo = app.versionInfo)
     assert(changed == app.copy(acceptedResourceRoles = Set("b")))
   }
 
-  test("AppUpdate does not change existing versionInfo") {
+  test("AppUpdate does not change existing versionInfo", Unstable) {
+    // TODO(jdef) marked unstable but it really needs moving to AppsResourceTest, and should test that code for
+    // preserving the version (see updateOrCreate)
     val app = AppDefinition(
       id = PathId("test"),
       cmd = Some("sleep 1"),
@@ -237,7 +239,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
     )
 
     val updateCmd = AppUpdate(cmd = Some("sleep 2"))
-    assert(Raml.fromRaml((updateCmd, app)).versionInfo == app.versionInfo)
+    assert(Raml.fromRaml(Raml.fromRaml((updateCmd, app))).versionInfo == app.versionInfo)
   }
 
   test("AppUpdate with a version and other changes are not allowed") {
@@ -303,7 +305,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       readinessChecks = Some(Seq(ReadinessCheckTestHelper.alternativeHttpsRaml))
     )
     val app = AppDefinition(id = PathId("/test"))
-    val updated = Raml.fromRaml((update, app))
+    val updated = Raml.fromRaml(Raml.fromRaml((update, app)))
 
     assert(update.readinessChecks.map(_.map(Raml.fromRaml(_))).contains(updated.readinessChecks))
   }
@@ -333,8 +335,10 @@ class AppUpdateTest extends MarathonSpec with Matchers {
 
     val update = fromJsonString(json)
     val strategy = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
-    assert(strategy.minimumHealthCapacity == 0.5
-      && strategy.maximumOverCapacity == 0)
+    assert(strategy.contains(raml.UpgradeStrategy(
+      minimumHealthCapacity = 0.5,
+      maximumOverCapacity = 0
+    )))
   }
 
   test("empty app residency on persistent volumes") {
@@ -361,7 +365,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val residency = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).residency
+    val residency = Raml.fromRaml(AppsResource.withoutPriorAppDefinition(update, "foo".toPath)).residency
     assert(residency.contains(Residency.defaultResidency))
   }
 
@@ -390,8 +394,10 @@ class AppUpdateTest extends MarathonSpec with Matchers {
 
     val update = fromJsonString(json)
     val strategy = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
-    assert(strategy.minimumHealthCapacity == 0.5
-      && strategy.maximumOverCapacity == 0)
+    assert(strategy.contains(raml.UpgradeStrategy(
+      minimumHealthCapacity = 0.5,
+      maximumOverCapacity = 0
+    )))
   }
 
   test("empty app persists container") {
@@ -423,7 +429,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val createdViaUpdate = AppsResource.withoutPriorAppDefinition(update, "/put-path-id".toPath)
+    val createdViaUpdate = Raml.fromRaml(AppsResource.withoutPriorAppDefinition(update, "/put-path-id".toPath))
     assert(update.container.isDefined)
     assert(createdViaUpdate.container.contains(state.Container.Docker(
       volumes = Seq(PersistentVolume("data", PersistentVolumeInfo(size = 100), mode = Mesos.Volume.Mode.RW)),
@@ -460,7 +466,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val create = AppsResource.withoutPriorAppDefinition(update, "/app".toPath)
+    val create = Raml.fromRaml(AppsResource.withoutPriorAppDefinition(update, "/app".toPath))
     assert(update.residency.isDefined)
     assert(update.residency.map(Raml.fromRaml(_)) == create.residency)
   }
@@ -498,7 +504,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val create = AppsResource.withoutPriorAppDefinition(update, "/app".toPath)
+    val create = Raml.fromRaml(AppsResource.withoutPriorAppDefinition(update, "/app".toPath))
     assert(update.upgradeStrategy.isDefined)
     assert(update.upgradeStrategy.map(Raml.fromRaml(_)).contains(create.upgradeStrategy))
   }
@@ -527,7 +533,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val residency = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).residency
+    val residency = Raml.fromRaml(AppsResource.withoutPriorAppDefinition(update, "foo".toPath)).residency
     assert(residency.contains(Residency.defaultResidency))
   }
 
@@ -553,7 +559,7 @@ class AppUpdateTest extends MarathonSpec with Matchers {
       """
 
     val update = fromJsonString(json)
-    val strategy = AppsResource.withoutPriorAppDefinition(update, "foo".toPath).upgradeStrategy
+    val strategy = Raml.fromRaml(AppsResource.withoutPriorAppDefinition(update, "foo".toPath)).upgradeStrategy
     assert(strategy == state.UpgradeStrategy.forResidentTasks)
   }
 

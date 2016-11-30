@@ -251,13 +251,20 @@ class AppsResource @Inject() (
     existing: Option[AppDefinition],
     appUpdate: raml.AppUpdate)(implicit identity: Identity): AppDefinition = {
     def createApp(): AppDefinition = {
-      val app = validateOrThrow(withoutPriorAppDefinition(appUpdate, appId))
-      checkAuthorization(CreateRunSpec, app)
+      val app = preprocessApp(withoutPriorAppDefinition(appUpdate, appId))
+      // versionInfo doesn't change - it's never overridden by an AppUpdate.
+      // the call to fromRaml loses the original versionInfo; it's just the current time in this case
+      // so we just query for that (using a more predictable clock than AppDefinition has access to)
+      val appDef = validateOrThrow(Raml.fromRaml(app).copy(versionInfo = VersionInfo.OnlyVersion(clock.now())))
+      checkAuthorization(CreateRunSpec, appDef)
     }
 
     def updateApp(current: AppDefinition): AppDefinition = {
-      val app = validateOrThrow(Raml.fromRaml((appUpdate, current)))
-      checkAuthorization(UpdateRunSpec, app)
+      val app = preprocessApp(Raml.fromRaml(appUpdate -> current))
+      // versionInfo doesn't change - it's never overridden by an AppUpdate.
+      // the call to fromRaml loses the original versionInfo; we take special care to preserve it
+      val appDef = validateOrThrow(Raml.fromRaml(app).copy(versionInfo = current.versionInfo))
+      checkAuthorization(UpdateRunSpec, appDef)
     }
 
     def rollback(current: AppDefinition, version: Timestamp): AppDefinition = {
@@ -311,7 +318,7 @@ object AppsResource {
     authz.isAuthorized(identity, ViewRunSpec, app)
   }
 
-  def withoutPriorAppDefinition(update: raml.AppUpdate, appId: PathId): AppDefinition = {
+  def withoutPriorAppDefinition(update: raml.AppUpdate, appId: PathId): raml.App = {
     val selectedStrategy = AppConversion.ResidencyAndUpgradeStrategy(
       residency = update.residency.map(Raml.fromRaml(_)),
       upgradeStrategy = update.upgradeStrategy.map(Raml.fromRaml(_)),
