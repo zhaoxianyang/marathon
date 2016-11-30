@@ -392,11 +392,13 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
         val empty = agent.usedResources.isEmpty && agent.reservedResourcesByRole.isEmpty
         if (!empty) {
           import mesosphere.marathon.integration.facades.MesosFormats._
-          logger.info(
-            "Waiting for blank slate Mesos...\n \"used_resources\": "
-              + Json.prettyPrint(Json.toJson(agent.usedResources)) + "\n \"reserved_resources\": "
-              + Json.prettyPrint(Json.toJson(agent.reservedResourcesByRole))
-          )
+          val usedResources: String =
+            try { Json.prettyPrint(Json.toJson(agent.usedResources)) }
+            catch { case e: Throwable => s"Could not serialize ${agent.usedResources}: ${e.getMessage}" }
+          val reservedResources: String =
+            try { Json.prettyPrint(Json.toJson(agent.reservedResourcesByRole)) }
+            catch { case e: Throwable => s"Could not serialize ${agent.reservedResourcesByRole}: ${e.getMessage}" }
+          logger.info(s"""Waiting for blank slate Mesos...\n "used_resources": "$usedResources"\n"reserved_resources": "$reservedResources"""")
         }
         empty
       }.fold(true) { (acc, next) => if (!next) next else acc }
