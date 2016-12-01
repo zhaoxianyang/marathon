@@ -9,11 +9,6 @@ import com.wix.accord.scalatest.ResultMatchers
 import scala.concurrent.duration._
 
 class AppDefinitionValidationTest extends UnitTest with ResultMatchers {
-  //  import com.wix.accord._
-
-  class Fixture {
-    val appDefinitionValidator = AppDefinition.validAppDefinition(Set.empty)(PluginManager.None)
-  }
 
   "AppDefinition" when {
     "created with the default unreachable strategy" should {
@@ -39,5 +34,9 @@ class AppDefinitionValidationTest extends UnitTest with ResultMatchers {
         f.appDefinitionValidator(app) should failWith(expectedViolation)
       }
     }
+  }
+
+  class Fixture {
+    val appDefinitionValidator = AppDefinition.validAppDefinition(Set.empty)(PluginManager.None)
   }
 }
