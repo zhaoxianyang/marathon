@@ -1,8 +1,10 @@
-package mesosphere.marathon.api.v2.json
+package mesosphere.marathon
+package api.v2.json
 
 import java.util.UUID
 
 import mesosphere.marathon.raml.{ App, GroupUpdate }
+import mesosphere.marathon.state._
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.test.{ GroupCreation, MarathonSpec }
 import mesosphere.marathon.upgrade._

@@ -19,6 +19,18 @@ case class BridgeNetwork(labels: Map[String, String] = Network.DefaultLabels) ex
 
 object Network {
 
+  implicit class NetworkHelper(networks: Seq[Network]) {
+    def hasNonHostNetworking = networks.exists(_ != HostNetwork)
+    def hasBridgeNetworking = networks.exists {
+      case _: BridgeNetwork => true
+      case _ => false
+    }
+    def hasContainerNetworking = networks.exists {
+      case _: ContainerNetwork => true
+      case _ => false
+    }
+  }
+
   val DefaultLabels: Map[String, String] = Map.empty
 
   def fromProto(net: NetworkDefinition): Option[Network] = {

@@ -4,6 +4,7 @@ package state
 import com.wix.accord.dsl._
 import com.wix.accord._
 import mesosphere.marathon.api.v2.Validation._
+import mesosphere.marathon.core.pod.Network
 
 import scala.collection.immutable.Seq
 
@@ -154,7 +155,8 @@ object Container {
     }
   }
 
-  def validContainer(enabledFeatures: Set[String]): Validator[Container] = {
+  def validContainer(networks: Seq[Network], enabledFeatures: Set[String]): Validator[Container] = {
+    import Network._
     val validGeneralContainer = validator[Container] { container =>
       container.volumes is every(Volume.validVolume(enabledFeatures))
     }
@@ -166,7 +168,11 @@ object Container {
         case md: MesosDocker => validate(md)(MesosDocker.validMesosDockerContainer)
         case ma: MesosAppC => validate(ma)(MesosAppC.validMesosAppCContainer)
       }
-    } and validGeneralContainer
+    } and
+      validGeneralContainer and
+      implied(networks.hasBridgeNetworking)(isTrue("hostPort is required for BRIDGE mode."){ container =>
+        container.portMappings.forall(_.hostPort.nonEmpty)
+      })
   }
 }
 

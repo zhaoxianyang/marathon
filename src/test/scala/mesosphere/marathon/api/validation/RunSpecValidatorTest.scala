@@ -8,7 +8,7 @@ import mesosphere.marathon.api.v2.Validation._
 import mesosphere.marathon.api.v2.validation.AppValidation
 import mesosphere.marathon.core.health.{ MarathonHttpHealthCheck, MesosCommandHealthCheck }
 import mesosphere.marathon.core.plugin.{ PluginDefinitions, PluginManager }
-import mesosphere.marathon.core.pod.HostNetwork
+import mesosphere.marathon.core.pod.{ HostNetwork, Network }
 import mesosphere.marathon.core.readiness.ReadinessCheck
 import mesosphere.marathon.raml.{ App, Raml, Resources }
 import mesosphere.marathon.state._
@@ -24,7 +24,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
 
   implicit lazy val validApp = AppValidation.validateCanonicalAppAPI(Set())
   implicit lazy val validAppDefinition = AppDefinition.validAppDefinition(Set())(PluginManager.None)
-  implicit lazy val validContainer = Container.validContainer(Set())
+  def validContainer(networks: Seq[Network] = Nil) = Container.validContainer(networks, Set())
 
   test("only cmd") {
     val app = AppDefinition(
@@ -284,7 +284,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume)
     )
-    assert(validate(container).isSuccess)
+    assert(validate(container)(validContainer()).isSuccess)
   }
 
   test("docker volume with missing containerPath is invalid") {
@@ -292,7 +292,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validDockerVolume.copy(containerPath = ""))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("docker volume with missing hostPath is invalid") {
@@ -300,7 +300,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validDockerVolume.copy(hostPath = ""))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("persistent volume with missing containerPath is invalid") {
@@ -308,7 +308,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(containerPath = ""))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("persistent volume with mode RO is invalid") {
@@ -316,7 +316,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(mode = mesos.Volume.Mode.RO))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("persistent volume with size 0 is invalid") {
@@ -324,7 +324,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(persistent = PersistentVolumeInfo(0)))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("persistent volume with size < 0 is invalid") {
@@ -332,7 +332,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(persistent = PersistentVolumeInfo(-1)))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("persistent volume with container path '.' is invalid") {
@@ -340,7 +340,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(containerPath = "."))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("persistent volume with container path '..' is invalid") {
@@ -348,7 +348,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(containerPath = ".."))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("persistent volume with container path '.hidden' is valid") {
@@ -356,7 +356,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(containerPath = ".hidden"))
     )
-    assert(validate(container).isSuccess)
+    assert(validate(container)(validContainer()).isSuccess)
   }
 
   test("persistent volume with container path with dots in the middle is valid") {
@@ -364,7 +364,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(containerPath = "foo..bar"))
     )
-    assert(validate(container).isSuccess)
+    assert(validate(container)(validContainer()).isSuccess)
   }
 
   test("persistent volume with container path starting with a forward slash is invalid") {
@@ -372,7 +372,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(containerPath = "/path"))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("persistent volume with container path containing forward slashes is invalid") {
@@ -380,7 +380,7 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
     val container = f.validDockerContainer.copy(
       volumes = Seq(f.validPersistentVolume.copy(containerPath = "foo/bar"))
     )
-    assert(validate(container).isFailure)
+    assert(validate(container)(validContainer()).isFailure)
   }
 
   test("Validation for update of resident apps") {
@@ -763,7 +763,8 @@ class RunSpecValidatorTest extends MarathonSpec with Matchers with GivenWhenThen
         id = PathId(id),
         cmd = Some("test"),
         container = Some(Container.Mesos(volumes)),
-        residency = Some(Residency(123, Protos.ResidencyDefinition.TaskLostBehavior.RELAUNCH_AFTER_TIMEOUT))
+        residency = Some(Residency(123, Protos.ResidencyDefinition.TaskLostBehavior.RELAUNCH_AFTER_TIMEOUT)),
+        portDefinitions = Seq(PortDefinition(0))
       )
     }
     val vol1 = persistentVolume("foo")

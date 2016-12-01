@@ -21,7 +21,7 @@ import mesosphere.marathon.core.pod.Network
 import mesosphere.marathon.core.task.Task
 import mesosphere.marathon.core.task.tracker.{ InstanceTracker, InstanceTrackerModule }
 import mesosphere.marathon.metrics.Metrics
-import mesosphere.marathon.raml.Resources
+import mesosphere.marathon.raml.{ Raml, Resources }
 import mesosphere.marathon.state.Container.Docker
 import mesosphere.marathon.state.Container.PortMapping
 import mesosphere.marathon.state.PathId._
@@ -300,10 +300,9 @@ object MarathonTestHelper {
   }
 
   def validateJsonSchema(app: AppDefinition, valid: Boolean = true): Unit = {
-    import mesosphere.marathon.api.v2.json.Formats._
     // TODO: Revalidate the decision to disallow null values in schema
     // Possible resolution: Do not render null values in our formats by default anymore.
-    val appStr = Json.prettyPrint(JsonTestHelper.removeNullFieldValues(Json.toJson(app)))
+    val appStr = Json.prettyPrint(JsonTestHelper.removeNullFieldValues(Json.toJson(Raml.toRaml(app))))
     validateJsonSchemaForString(appStr, valid)
   }
 

@@ -91,6 +91,8 @@ types:
           See [the Mesos attribute and resources documentation](http://mesos.apache.org/documentation/latest/attributes-resources/) for details
       args?:
         type: array
+        (pragma.forceOptional):
+        usage: forceOptional beause we should not render it when empty. use omitEmpty once available.
         items: string
         description: |
           An array of strings that represents an alternative mode of specifying the

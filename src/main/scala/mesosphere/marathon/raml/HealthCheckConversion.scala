@@ -163,8 +163,7 @@ trait HealthCheckConversion {
 
   implicit val appHealthCheckRamlReader = Reads[AppHealthCheck, CoreHealthCheck] { check =>
     val result: CoreHealthCheck = check match {
-      // TODO(jdef) raml lacks support for delay, maybe because marathon checks don't support it?
-      case AppHealthCheck(Some(command), grace, _, interval, failures, None, None, _, proto, timeout) =>
+      case AppHealthCheck(Some(command), grace, _, interval, failures, None, None, _, proto, timeout, delay) =>
         // we allow, but ignore, a port-index for backwards compatibility
         if (proto != AppHealthCheckProtocol.Command) // validation should have failed this already
           throw SerializationFailedException(s"illegal protocol $proto specified with command")
@@ -173,9 +172,10 @@ trait HealthCheckConversion {
           interval = interval.seconds,
           timeout = timeout.seconds,
           maxConsecutiveFailures = failures,
-          command = Command(command.value)
+          command = Command(command.value),
+          delay = delay.seconds
         )
-      case AppHealthCheck(None, grace, ignore1xx, interval, failures, path, port, index, proto, timeout) =>
+      case AppHealthCheck(None, grace, ignore1xx, interval, failures, path, port, index, proto, timeout, delay) =>
         proto match {
           case AppHealthCheckProtocol.MesosHttp | AppHealthCheckProtocol.MesosHttps =>
             MesosHttpHealthCheck(
@@ -188,7 +188,8 @@ trait HealthCheckConversion {
               path = path,
               protocol =
                 if (proto == AppHealthCheckProtocol.MesosHttp) Protos.HealthCheckDefinition.Protocol.MESOS_HTTP
-                else Protos.HealthCheckDefinition.Protocol.MESOS_HTTPS
+                else Protos.HealthCheckDefinition.Protocol.MESOS_HTTPS,
+              delay = delay.seconds
             )
           case AppHealthCheckProtocol.MesosTcp =>
             MesosTcpHealthCheck(
@@ -197,7 +198,8 @@ trait HealthCheckConversion {
               timeout = timeout.seconds,
               maxConsecutiveFailures = failures,
               portIndex = index.map(PortReference(_)),
-              port = port
+              port = port,
+              delay = delay.seconds
             )
           case AppHealthCheckProtocol.Http | AppHealthCheckProtocol.Https =>
             MarathonHttpHealthCheck(

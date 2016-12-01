@@ -8,6 +8,7 @@ import mesosphere.marathon.core.pod.{ HostNetwork, HostVolume, MesosContainer, P
 import mesosphere.marathon.integration.facades.MarathonFacade._
 import mesosphere.marathon.integration.setup.{ EmbeddedMarathonTest, MesosConfig, WaitTestSupport }
 import mesosphere.marathon.raml.{ App, Container, DockerContainer, EngineType }
+import mesosphere.marathon.state.PathId
 import mesosphere.marathon.state.PathId._
 
 import scala.collection.immutable.Seq

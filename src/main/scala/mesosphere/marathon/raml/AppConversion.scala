@@ -36,7 +36,7 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
     App(
       id = app.id.toString,
       acceptedResourceRoles = if (app.acceptedResourceRoles.nonEmpty) Some(app.acceptedResourceRoles) else None,
-      args = app.args,
+      args = if (app.args.nonEmpty) Some(app.args) else None,
       backoffFactor = app.backoffStrategy.factor,
       backoffSeconds = app.backoffStrategy.backoff.toSeconds.toInt,
       cmd = app.cmd,
@@ -65,7 +65,7 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
       upgradeStrategy = Some(app.upgradeStrategy.toRaml),
       user = app.user,
       version = Some(app.versionInfo.version.toOffsetDateTime),
-      versionInfo = Some(app.versionInfo.toRaml),
+      versionInfo = app.versionInfo.toRaml,
       unreachableStrategy = Some(app.unreachableStrategy.toRaml)
     )
   }
@@ -144,7 +144,7 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
     val result: AppDefinition = AppDefinition(
       id = PathId(app.id),
       cmd = app.cmd,
-      args = app.args,
+      args = app.args.getOrElse(Nil),
       user = app.user,
       env = Raml.fromRaml(app.env),
       instances = app.instances,
@@ -180,7 +180,7 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
     app.copy(
       // id stays the same
       cmd = update.cmd.orElse(app.cmd),
-      args = update.args.getOrElse(app.args),
+      args = update.args.orElse(app.args),
       user = update.user.orElse(app.user),
       env = update.env.getOrElse(app.env),
       instances = update.instances.getOrElse(app.instances),
@@ -215,7 +215,7 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
       residency = update.residency.orElse(app.residency),
       secrets = update.secrets.getOrElse(app.secrets),
       taskKillGracePeriodSeconds = update.taskKillGracePeriodSeconds.orElse(app.taskKillGracePeriodSeconds),
-      unreachableStrategy = update.unreachableStrategy.map(_.fromRaml).orElse(app.unreachableStrategy)
+      unreachableStrategy = update.unreachableStrategy.orElse(app.unreachableStrategy)
     )
   }
 }

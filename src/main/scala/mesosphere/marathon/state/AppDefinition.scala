@@ -351,13 +351,8 @@ case class AppDefinition(
     copy(id = baseId, dependencies = dependencies.map(_.canonicalPath(baseId)))
   }
 
-  val usesNonHostNetworking = networks.exists(_ != HostNetwork)
-  val usesContainerNetworking = networks.exists {
-    case _: ContainerNetwork => true
-    case _ => false
-  }
-
   def portAssignments(task: Task): Seq[PortAssignment] = {
+    import Network._
     @SuppressWarnings(Array("OptionGet", "TraversableHead"))
     def fromPortMappings(container: Container): Seq[PortAssignment] =
       task.launched.map { launched =>
@@ -373,7 +368,7 @@ case class AppDefinition(
             }
 
           val effectivePort =
-            if (usesContainerNetworking || portMapping.hostPort.isEmpty) {
+            if (networks.hasContainerNetworking || portMapping.hostPort.isEmpty) {
               portMapping.containerPort
             } else {
               hostPort.get
@@ -400,7 +395,7 @@ case class AppDefinition(
     }.getOrElse(Nil)
 
     container.collect {
-      case c: Container if usesNonHostNetworking => fromPortMappings(c)
+      case c: Container if networks.hasNonHostNetworking => fromPortMappings(c)
     }.getOrElse(fromPortDefinitions)
   }
 
@@ -408,7 +403,7 @@ case class AppDefinition(
     def fromPortMappings = container.map(_.portMappings.flatMap(_.name)).getOrElse(Seq.empty)
     def fromPortDefinitions = portDefinitions.flatMap(_.name)
 
-    if (usesNonHostNetworking) fromPortMappings else fromPortDefinitions
+    if (networks.hasNonHostNetworking) fromPortMappings else fromPortDefinitions
   }
 }
 
@@ -668,11 +663,11 @@ object AppDefinition extends GeneralPurposeCombinators {
 
   private def validBasicAppDefinition(enabledFeatures: Set[String]) = validator[AppDefinition] { appDef =>
     appDef.upgradeStrategy is valid
-    appDef.container.each is valid(Container.validContainer(enabledFeatures))
+    appDef.container.each is valid(Container.validContainer(appDef.networks, enabledFeatures))
     appDef.storeUrls is every(urlCanBeResolvedValidator)
     appDef.portDefinitions is PortDefinitions.portDefinitionsValidator
     appDef.executor should matchRegexFully("^(//cmd)|(/?[^/]+(/[^/]+)*)|$")
-    appDef is containsCmdArgsOrContainer
+    appDef must containsCmdArgsOrContainer
     appDef.healthChecks is every(portIndexIsValid(appDef.portIndices))
     appDef must haveAtMostOneMesosHealthCheck
     appDef.instances should be >= 0

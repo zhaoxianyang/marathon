@@ -1,7 +1,7 @@
 package mesosphere.marathon
 package api.v2.json
 
-import mesosphere.marathon.state.{ AppDefinition, Timestamp, PathId, RootGroup }
+import mesosphere.marathon.state.{ AppDefinition, Group, Timestamp, PathId, RootGroup }
 import mesosphere.marathon.test.GroupCreation
 import com.wix.accord.validate
 import org.scalatest.{ FunSuite, GivenWhenThen, Matchers }
@@ -18,6 +18,7 @@ class GroupUpdateTest extends FunSuite with Matchers with GivenWhenThen with Gro
       Raml.fromRaml(AppNormalization.apply(app, AppNormalization.Config(None)))
     }
   }
+  implicit val groupUpdateRamlReader = raml.GroupConversion.groupUpdateRamlReads // HACK: workaround bogus compiler error?!
 
   test("A group update can be applied to an empty group") {
     Given("An empty group with updates")
@@ -37,9 +38,9 @@ class GroupUpdateTest extends FunSuite with Matchers with GivenWhenThen with Gro
     val timestamp = Timestamp.now()
 
     When("The update is performed")
-    val result = RootGroup.fromGroup(Raml.fromRaml((GroupConversion.UpdateGroupStructureOp(update, rootGroup, timestamp), groupConversionContext)))
+    val result: Group = Raml.fromRaml(GroupConversion.UpdateGroupStructureOp(update, rootGroup, timestamp) -> groupConversionContext)
 
-    validate(result)(RootGroup.valid(noEnabledFeatures)).isSuccess should be(true)
+    validate(RootGroup.fromGroup(result))(RootGroup.valid(noEnabledFeatures)).isSuccess should be(true)
 
     Then("The update is applied correctly")
     result.id should be(PathId.empty)
@@ -81,7 +82,7 @@ class GroupUpdateTest extends FunSuite with Matchers with GivenWhenThen with Gro
     val timestamp = Timestamp.now()
 
     When("The update is performed")
-    val result = RootGroup.fromGroup(Raml.fromRaml((GroupConversion.UpdateGroupStructureOp(update, actual, timestamp), groupConversionContext)))
+    val result: RootGroup = RootGroup.fromGroup(Raml.fromRaml((GroupConversion.UpdateGroupStructureOp(update, actual, timestamp), groupConversionContext)))
 
     validate(result)(RootGroup.valid(Set())).isSuccess should be(true)
 
@@ -176,7 +177,7 @@ class GroupUpdateTest extends FunSuite with Matchers with GivenWhenThen with Gro
     When("The update is performed")
     val result = Raml.fromRaml((GroupConversion.UpdateGroupStructureOp(update, createRootGroup(), Timestamp.now()), groupConversionContext))
 
-    validate(result)(RootGroup.valid(Set())).isSuccess should be(true)
+    validate(RootGroup.fromGroup(result))(RootGroup.valid(Set())).isSuccess should be(true)
 
     Then("The update is applied correctly")
     val group = result.group("test-group".toRootPath)

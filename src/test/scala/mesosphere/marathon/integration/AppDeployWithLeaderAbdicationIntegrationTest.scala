@@ -45,7 +45,7 @@ class AppDeployWithLeaderAbdicationIntegrationTest extends AkkaIntegrationFunTes
       upgradeStrategy = Some(raml.UpgradeStrategy(minimumHealthCapacity = 1.0, maximumOverCapacity = 1.0))))
 
     And("new and updated task is started successfully")
-    waitForTasks(appId, 2, maxWait = 90.seconds) //make sure, the new task has really started
+    val updated = waitForTasks(appId, 2, maxWait = 90.seconds) //make sure, the new task has really started
 
     val updatedTask = updated.diff(started.value).head
     val updatedTaskIds: List[String] = updated.map(_.id).diff(startedTaskIds)

@@ -85,7 +85,7 @@ class ResidentTaskIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMa
 
     And("a new task is started that checks for the previously written file")
     // deploy a new version that checks for the data written the above step
-    marathon.updateApp(
+    val update = marathon.updateApp(
       PathId(app.id),
       AppUpdate(
         instances = Some(1),

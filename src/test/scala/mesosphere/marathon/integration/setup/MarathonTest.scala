@@ -18,8 +18,9 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
 import com.typesafe.scalalogging.StrictLogging
 import mesosphere.marathon.api.RestResource
+import mesosphere.marathon.core.health.{ MarathonHttpHealthCheck, PortReference }
 import mesosphere.marathon.integration.facades.{ ITEnrichedTask, ITLeaderResult, MarathonFacade, MesosFacade }
-import mesosphere.marathon.raml.{ App, AppHealthCheck, AppHealthCheckProtocol, AppVolume, Container, DockerContainer, DockerNetwork, EngineType, PodState, PodStatus, Raml, ReadMode }
+import mesosphere.marathon.raml.{ App, AppHealthCheck, AppVolume, Container, DockerContainer, DockerNetwork, EngineType, PodState, PodStatus, Raml, ReadMode }
 import mesosphere.marathon.state.PathId
 import mesosphere.marathon.test.ExitDisabledTest
 import mesosphere.marathon.util.{ Lock, Retry }
@@ -314,7 +315,7 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
       executor = "//cmd",
       instances = instances,
       cpus = 0.5, mem = 128.0,
-      healthChecks = healthCheck.toSeq,
+      healthChecks = healthCheck.to[Seq],
       dependencies = dependencies.map(_.toString)
     )
   }
@@ -364,7 +365,7 @@ trait MarathonTest extends Suite with StrictLogging with ScalaFutures with Befor
       instances = instances,
       cpus = 0.5,
       mem = 128.0,
-      healthChecks = healthCheck.toSeq,
+      healthChecks = healthCheck.to[Seq],
       dependencies = dependencies.map(_.toString)
     )
   }

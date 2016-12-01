@@ -3,7 +3,7 @@ package integration
 
 import java.util.UUID
 
-import mesosphere.{ AkkaIntegrationFunTest, IntegrationTag, Unstable }
+import mesosphere.{ AkkaIntegrationFunTest, Unstable }
 import mesosphere.marathon.integration.facades.MarathonFacade._
 import mesosphere.marathon.integration.facades.{ ITDeployment, ITEnrichedTask, ITQueueItem }
 import mesosphere.marathon.integration.setup._
@@ -49,7 +49,7 @@ class AppDeployIntegrationTest
     val taskBeforeRedeployment = waitForTasks(app.id.toPath, 1) //make sure, the app has really started
 
     When("redeploying the app without changes")
-    marathon.updateApp(app.id, AppUpdate(id = Some(app.id), cmd = app.cmd), force = false)
+    val update = marathon.updateApp(app.id, AppUpdate(id = Some(app.id), cmd = app.cmd), force = false)
     waitForDeployment(update)
     val tasksAfterRedeployment = waitForTasks(app.id.toPath, 1) //make sure, the app has really started
 
@@ -168,7 +168,7 @@ class AppDeployIntegrationTest
   test("create a simple app with a Marathon HTTP health check") {
     Given("a new app")
     val app = appProxy(testBasePath / "http-app", "v1", instances = 1, healthCheck = None).
-      copy(healthChecks = Set(ramlHttpHealthCheck))
+      copy(healthChecks = Seq(ramlHealthCheck))
     val check = appProxyCheck(PathId(app.id), "v1", state = true)
 
     When("The app is deployed")

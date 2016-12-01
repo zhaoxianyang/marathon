@@ -27,7 +27,6 @@ class AppDefinitionTest extends MarathonSpec with Matchers {
   val enabledFeatures = Set("secrets")
   val validAppDefinition = AppDefinition.validAppDefinition(enabledFeatures)(PluginManager.None)
 
-  // TODO AppDefinition.json schema is out of date w/ respect to RAML
   test("Validation", Unstable) {
     def shouldViolate(app: AppDefinition, path: String, template: String)(implicit validAppDef: Validator[AppDefinition] = validAppDefinition): Unit = {
       validate(app) match {
@@ -136,7 +135,7 @@ class AppDefinitionTest extends MarathonSpec with Matchers {
       "Port names must be unique."
     )
 
-    val correct = AppDefinition(id = "test".toPath)
+    val correct = AppDefinition(id = "test".toRootPath)
 
     app = correct.copy(
       container = Some(Docker(

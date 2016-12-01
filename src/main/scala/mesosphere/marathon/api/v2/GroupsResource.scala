@@ -14,7 +14,7 @@ import mesosphere.marathon.api.{ AuthResource, MarathonMediaType }
 import mesosphere.marathon.core.appinfo.{ GroupInfo, GroupInfoService, Selector }
 import mesosphere.marathon.core.group.GroupManager
 import mesosphere.marathon.plugin.auth._
-import mesosphere.marathon.raml.{ GroupConversion, Raml }
+import mesosphere.marathon.raml.Raml
 import mesosphere.marathon.state.PathId._
 import mesosphere.marathon.state._
 import mesosphere.marathon.stream._
@@ -209,7 +209,7 @@ class GroupsResource @Inject() (
       val newVersion = Timestamp.now()
 
       if (dryRun) {
-        val effectivePath = groupUpdate.id.fold(id.toRootPath)(_.canonicalPath(id.toRootPath))
+        val effectivePath = groupUpdate.id.fold(id.toRootPath)(_.toPath.canonicalPath(id.toRootPath))
 
         val originalGroup = result(groupManager.rootGroup())
         val updatedGroup = applyGroupUpdate(originalGroup, effectivePath, groupUpdate, newVersion)
@@ -294,12 +294,14 @@ class GroupsResource @Inject() (
       rootGroup.updateTransitiveApps(group.id, app => app.copy(instances = (app.instances * scale).ceil.toInt), newVersion)
     }
 
+    implicit val groupUpdateRamlReader = raml.GroupConversion.groupUpdateRamlReads // HACK: workaround bogus compiler error?!
+
     def createOrUpdateChange = {
       // groupManager.update always passes a group, even if it doesn't exist
       val maybeExistingGroup = result(groupManager.group(group.id))
-      val groupConversionContext: GroupConversion.Context = appsResourceContext
+      val groupConversionContext: raml.GroupConversion.Context = appsResourceContext
       val updatedGroup: Group = Raml.fromRaml(
-        GroupConversion.UpdateGroupStructureOp(groupUpdate, group, newVersion) -> groupConversionContext)
+        raml.GroupConversion.UpdateGroupStructureOp(groupUpdate, group, newVersion) -> groupConversionContext)
 
       maybeExistingGroup.fold(checkAuthorization(CreateRunSpec, updatedGroup))(checkAuthorization(UpdateGroup, _))
 
@@ -335,7 +337,7 @@ object GroupsResource {
   }
 
   case class AppsResourceContext(enabledFeatures: Set[String], config: AppNormalization.Config)
-      extends GroupConversion.Context {
+      extends raml.GroupConversion.Context {
 
     /** convert app to canonical form */
     val preprocessor: (raml.App => raml.App) = AppsResource.preprocessor(enabledFeatures, config)

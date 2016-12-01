@@ -122,7 +122,7 @@ class TaskBuilder(
     discoveryInfoBuilder.setVisibility(org.apache.mesos.Protos.DiscoveryInfo.Visibility.FRAMEWORK)
 
     val portProtos =
-      if (runSpec.usesNonHostNetworking) {
+      if (runSpec.networks.hasNonHostNetworking) {
         runSpec.container.map { c =>
           // The run spec uses bridge and user modes with portMappings, use them to create the Port messages
           c.portMappings.zip(hostPorts).collect {
@@ -153,7 +153,7 @@ class TaskBuilder(
   }
 
   protected def computeContainerInfo(hostPorts: Seq[Option[Int]]): Option[ContainerInfo] = {
-    if (runSpec.container.isEmpty && !runSpec.usesNonHostNetworking) {
+    if (runSpec.container.isEmpty && !runSpec.networks.hasNonHostNetworking) {
       None
     } else {
       val builder = ContainerInfo.newBuilder

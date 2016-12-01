@@ -43,7 +43,7 @@ class ReadinessCheckIntegrationTest extends AkkaIntegrationFunTest with Embedded
 
     When("The service is upgraded")
     val oldTask = marathon.tasks(serviceDef.id).value.head
-    marathon.updateApp(serviceDef.id, AppUpdate(env = Some(sys.env.mapValues(v => EnvVarValue(v)))), force = false)
+    val update = marathon.updateApp(serviceDef.id, AppUpdate(env = Some(sys.env.mapValues(v => EnvVarValue(v)))), force = false)
     val newTask = eventually {
       marathon.tasks(serviceDef.id).value.find(_.id != oldTask.id).get
     }
