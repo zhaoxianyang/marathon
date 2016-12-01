@@ -47,9 +47,9 @@ class AppsResource @Inject() (
   implicit lazy val validateCanonicalAppUpdateAPI = AppValidation.validateCanonicalAppUpdateAPI(config.availableFeatures)
 
   val normalizationConfig = AppNormalization.Config(config.defaultNetworkName.get)
-  def preprocessApp(app: raml.App): raml.App = AppsResource.preprocessor(config.availableFeatures, normalizationConfig)(app)
+  def validateAndNormalizeApp(app: raml.App): raml.App = AppsResource.preprocessor(config.availableFeatures, normalizationConfig)(app)
 
-  def preprocess(app: raml.AppUpdate): raml.AppUpdate = {
+  def validateAndNormalizeAppUpdate(app: raml.AppUpdate): raml.AppUpdate = {
     validateOrThrow(app)(AppValidation.validateOldAppUpdateAPI)
     val migrated = AppNormalization.forDeprecatedFields(app)
     validateOrThrow(app)(validateCanonicalAppUpdateAPI)
@@ -80,7 +80,7 @@ class AppsResource @Inject() (
     @Context req: HttpServletRequest): Response = authenticated(req) { implicit identity =>
 
     assumeValid {
-      val rawApp = Raml.fromRaml(preprocessApp(Json.parse(body).as[raml.App]))
+      val rawApp = Raml.fromRaml(validateAndNormalizeApp(Json.parse(body).as[raml.App]))
       withValid(rawApp.withCanonizedIds()) { appDef =>
         val now = clock.now()
         val app = appDef.copy(versionInfo = VersionInfo.OnlyVersion(now))
@@ -160,7 +160,7 @@ class AppsResource @Inject() (
     val now = clock.now()
 
     assumeValid {
-      val appUpdate = preprocess(Json.parse(body).as[raml.AppUpdate])
+      val appUpdate = validateAndNormalizeAppUpdate(Json.parse(body).as[raml.AppUpdate])
       withValid(appUpdate.copy(id = Some(appId.toString))) { appUpdate =>
         val plan = result(groupManager.updateApp(appId, updateOrCreate(appId, _, appUpdate), now, force))
 
@@ -183,7 +183,7 @@ class AppsResource @Inject() (
     @Context req: HttpServletRequest): Response = authenticated(req) { implicit identity =>
 
     assumeValid {
-      val appUpdates = Json.parse(body).as[Seq[raml.AppUpdate]].map(upd => withCanonizedIds(preprocess(upd)))
+      val appUpdates = Json.parse(body).as[Seq[raml.AppUpdate]].map(upd => withCanonizedIds(validateAndNormalizeAppUpdate(upd)))
       withValid(appUpdates) { updates =>
         val version = clock.now()
 
@@ -251,7 +251,7 @@ class AppsResource @Inject() (
     existing: Option[AppDefinition],
     appUpdate: raml.AppUpdate)(implicit identity: Identity): AppDefinition = {
     def createApp(): AppDefinition = {
-      val app = preprocessApp(withoutPriorAppDefinition(appUpdate, appId))
+      val app = validateAndNormalizeApp(withoutPriorAppDefinition(appUpdate, appId))
       // versionInfo doesn't change - it's never overridden by an AppUpdate.
       // the call to fromRaml loses the original versionInfo; it's just the current time in this case
       // so we just query for that (using a more predictable clock than AppDefinition has access to)
@@ -260,7 +260,7 @@ class AppsResource @Inject() (
     }
 
     def updateApp(current: AppDefinition): AppDefinition = {
-      val app = preprocessApp(Raml.fromRaml(appUpdate -> current))
+      val app = validateAndNormalizeApp(Raml.fromRaml(appUpdate -> current))
       // versionInfo doesn't change - it's never overridden by an AppUpdate.
       // the call to fromRaml loses the original versionInfo; we take special care to preserve it
       val appDef = validateOrThrow(Raml.fromRaml(app).copy(versionInfo = current.versionInfo))

@@ -8,6 +8,7 @@ trait GroupConversion {
 
   import GroupConversion._
 
+  // TODO needs a dedicated/focused unit test; other (larger) unit tests provide indirect coverage
   implicit val groupUpdateRamlReads: Reads[(UpdateGroupStructureOp, Context), CoreGroup] =
     Reads[(UpdateGroupStructureOp, Context), CoreGroup] { src =>
       val (op, context) = src
@@ -28,8 +29,6 @@ object GroupConversion extends GroupConversion {
     require(update.version.isEmpty, "For a structural update, no version should be given.")
 
     def apply(implicit ctx: Context): CoreGroup = {
-      // TODO(jdef) validation should enforce that .apps and .groups contain distinct things (Set); RAML should specify `uniqueItems: true`
-
       val effectiveGroups: Map[PathId, Group] = update.groups.fold(current.groupsById) { updates =>
         updates.map { groupUpdate =>
           val groupId = groupId(groupUpdate).canonicalPath(current.id)
@@ -59,7 +58,7 @@ object GroupConversion extends GroupConversion {
   object UpdateGroupStructureOp {
 
     def groupId(update: GroupUpdate): PathId = update.id.map(PathId(_)).getOrElse(
-      // TODO this belongs in validation!
+      // validation should catch this..
       throw new SerializationFailedException("No group id was given!")
     )
 

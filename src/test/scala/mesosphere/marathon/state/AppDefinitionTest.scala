@@ -179,7 +179,6 @@ class AppDefinitionTest extends MarathonSpec with Matchers {
 
     val proto = app.toProto
     proto.getId should be("app-with-ip-address")
-    proto.hasIpAddress should be (false)
 
     val read = AppDefinition(id = runSpecId).mergeFromProto(proto)
     read should be(app)

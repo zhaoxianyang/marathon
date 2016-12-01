@@ -95,6 +95,7 @@ types:
       ignoreHttp1xx?:
         type: boolean
         description: Ignore HTTP 1xx responses
+        usage: not providing a default value to avoid seeing this field when serializing non-http checks
       intervalSeconds:
         type: integer
         format: int32

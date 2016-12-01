@@ -23,15 +23,15 @@ trait ReadinessConversions {
     )
   }
 
+  implicit val readinessProtocolReads: Reads[HttpScheme, core.readiness.ReadinessCheck.Protocol] = Reads {
+    case HttpScheme.Http => core.readiness.ReadinessCheck.Protocol.HTTP
+    case HttpScheme.Https => core.readiness.ReadinessCheck.Protocol.HTTPS
+  }
+
   implicit val appReadinessRamlReader = Reads[ReadinessCheck, core.readiness.ReadinessCheck] { check =>
-    import core.readiness.ReadinessCheck.Protocol._
-    val protocol = check.protocol match {
-      case HttpScheme.Http => HTTP
-      case HttpScheme.Https => HTTPS
-    }
     core.readiness.ReadinessCheck(
       name = check.name,
-      protocol = protocol,
+      protocol = check.protocol.fromRaml,
       path = check.path,
       portName = check.portName,
       interval = check.intervalSeconds.seconds,

@@ -36,7 +36,7 @@ trait HealthCheckConversion {
         maxConsecutiveFailures = maxConFailures,
         delay = delay.seconds,
         path = httpCheck.path,
-        protocol = httpCheck.scheme.map(Raml.fromRaml(_)).getOrElse(HealthCheckDefinition.Protocol.HTTP),
+        protocol = httpCheck.scheme.map(Raml.fromRaml[HttpScheme, HealthCheckDefinition.Protocol]).getOrElse(HealthCheckDefinition.Protocol.HTTP),
         portIndex = Some(PortReference(httpCheck.endpoint))
       )
     case HealthCheck(None, Some(tcpCheck), None, gracePeriod, interval, maxConFailures, timeout, delay) =>
@@ -164,7 +164,7 @@ trait HealthCheckConversion {
   implicit val appHealthCheckRamlReader = Reads[AppHealthCheck, CoreHealthCheck] { check =>
     val result: CoreHealthCheck = check match {
       // TODO(jdef) raml lacks support for delay, maybe because marathon checks don't support it?
-      case AppHealthCheck(Some(command), grace, None, interval, failures, None, None, _, proto, timeout) =>
+      case AppHealthCheck(Some(command), grace, _, interval, failures, None, None, _, proto, timeout) =>
         // we allow, but ignore, a port-index for backwards compatibility
         if (proto != AppHealthCheckProtocol.Command) // validation should have failed this already
           throw SerializationFailedException(s"illegal protocol $proto specified with command")

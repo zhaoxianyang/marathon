@@ -59,7 +59,7 @@ trait VolumeConversion extends ConstraintConversion with DefaultConversions {
     }
   }
 
-  implicit val appVolumeRamlReader: Reads[AppVolume, state.Volume] = Reads { vol =>
+  implicit val volumeReads: Reads[AppVolume, state.Volume] = Reads { vol =>
     def failed[T](msg: String): T =
       throw new SerializationFailedException(msg)
 

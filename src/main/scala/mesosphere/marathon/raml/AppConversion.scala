@@ -7,7 +7,7 @@ import mesosphere.marathon.state._
 import scala.concurrent.duration._
 
 trait AppConversion extends ConstraintConversion with EnvVarConversion with HealthCheckConversion
-    with NetworkConversion with ReadinessConversions with SecretConversion with VolumeConversion with UnreachableStrategyConversion {
+    with NetworkConversion with ReadinessConversions with SecretConversion with UnreachableStrategyConversion {
 
   import AppConversion._
 
@@ -29,10 +29,6 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
     case state.VersionInfo.FullVersionInfo(_, scale, config) => Some(VersionInfo(scale.toOffsetDateTime, config.toOffsetDateTime))
     case state.VersionInfo.OnlyVersion(version) => None
     case state.VersionInfo.NoVersion => None
-  }
-
-  implicit val parameterWrites: Writes[state.Parameter, DockerParameter] = Writes { param =>
-    DockerParameter(param.key, param.value)
   }
 
   implicit val appWriter: Writes[AppDefinition, App] = Writes { app =>
@@ -117,65 +113,6 @@ trait AppConversion extends ConstraintConversion with EnvVarConversion with Heal
       name = portDef.name,
       labels = portDef.labels
     )
-  }
-
-  implicit val portMappingRamlReader = Reads[ContainerPortMapping, state.Container.PortMapping] {
-    case ContainerPortMapping(containerPort, hostPort, labels, name, protocol, servicePort) =>
-      import state.Container.PortMapping._
-      val decodedProto = protocol match {
-        case NetworkProtocol.Tcp => TCP
-        case NetworkProtocol.Udp => UDP
-        case NetworkProtocol.UdpTcp => UDP_TCP
-      }
-      state.Container.PortMapping(
-        containerPort = containerPort,
-        hostPort = hostPort.orElse(defaultInstance.hostPort),
-        servicePort = servicePort,
-        protocol = decodedProto,
-        name = name,
-        labels = labels
-      )
-  }
-
-  implicit val appContainerRamlReader = Reads[Container, state.Container] { (container: Container) =>
-    val volumes = container.volumes.map(Raml.fromRaml(_))
-    val portMappings = container.portMappings.map(Raml.fromRaml(_))
-
-    val result: state.Container = (container.`type`, container.docker, container.appc) match {
-      case (EngineType.Docker, Some(docker), None) =>
-        state.Container.Docker(
-          volumes = volumes,
-          image = docker.image,
-          portMappings = portMappings, // assumed already normalized, see Formats
-          privileged = docker.privileged.getOrElse(false),
-          parameters = docker.parameters.map(p => Parameter(p.key, p.value)),
-          forcePullImage = docker.forcePullImage.getOrElse(false)
-        )
-      case (EngineType.Mesos, Some(docker), None) =>
-        state.Container.MesosDocker(
-          volumes = volumes,
-          image = docker.image,
-          portMappings = portMappings, // assumed already normalized, see Formats
-          credential = docker.credential.map(c => state.Container.Credential(principal = c.principal, secret = c.secret)),
-          forcePullImage = docker.forcePullImage.getOrElse(false)
-        )
-      case (EngineType.Mesos, None, Some(appc)) =>
-        state.Container.MesosAppC(
-          volumes = volumes,
-          image = appc.image,
-          portMappings = portMappings,
-          id = appc.id,
-          labels = appc.labels,
-          forcePullImage = appc.forcePullImage.getOrElse(false)
-        )
-      case (EngineType.Mesos, None, None) =>
-        state.Container.Mesos(
-          volumes = volumes,
-          portMappings = portMappings
-        )
-      case ct => throw SerializationFailedException(s"illegal container specification $ct")
-    }
-    result
   }
 
   implicit val upgradeStrategyRamlReader = Reads[UpgradeStrategy, state.UpgradeStrategy] { us =>
