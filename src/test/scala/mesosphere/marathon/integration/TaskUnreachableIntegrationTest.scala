@@ -81,30 +81,6 @@ class TaskUnreachableIntegrationTest extends AkkaIntegrationFunTest with Embedde
     marathon.tasks(app.id).value.head.state should be("TASK_RUNNING")
   }
 
-  test("A task lost with mesos master failover will not kill the task - https://github.com/mesosphere/marathon/issues/4214") {
-    Given("a new app")
-    val strategy = UnreachableStrategy(5.minutes, 10.minutes)
-    val app = appProxy(testBasePath / "app", "v1", instances = 1).copy(unreachableStrategy = strategy)
-    waitForDeployment(marathon.createAppV2(app))
-    val task = waitForTasks(app.id, 1).head
-
-    When("We stop the slave, the task is declared unreachable")
-    mesosCluster.agents.head.stop()
-    waitForEventMatching("Task is declared unreachable") { matchEvent("TASK_UNREACHABLE", task) }
-
-    And("The task is not removed from the task list")
-    val lost = waitForTasks(app.id, 1).head
-    lost.state should be("TASK_UNREACHABLE")
-
-    When("We do a Mesos Master failover and start the slave again")
-    mesosCluster.masters(1).start()
-    mesosCluster.masters.head.stop()
-    mesosCluster.agents.head.start()
-
-    Then("The task reappears as running")
-    waitForEventMatching("Task is declared running again") { matchEvent("TASK_RUNNING", task) }
-  }
-
   // regression test for https://github.com/mesosphere/marathon/issues/4059
   test("Scaling down an app with constraints and unreachable task will succeed") {
     import mesosphere.marathon.Protos.Constraint
@@ -157,5 +133,60 @@ class TaskUnreachableIntegrationTest extends AkkaIntegrationFunTest with Embedde
 
   private def matchScaleApplication(infoString: String, appId: String): Boolean = {
     infoString.contains(s"List(Map(actions -> List(Map(action -> ScaleApplication, app -> $appId)))))")
+  }
+}
+
+@IntegrationTest
+class TaskUnreachableWithMasterFailOverIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMarathonMesosClusterTest {
+
+  override lazy val mesosNumMasters = 2
+  override lazy val mesosNumSlaves = 2
+
+  override val marathonArgs: Map[String, String] = Map(
+    "reconciliation_initial_delay" -> "5000",
+    "reconciliation_interval" -> "5000",
+    "scale_apps_initial_delay" -> "5000",
+    "scale_apps_interval" -> "5000",
+    "min_revive_offers_interval" -> "100",
+    "task_lost_expunge_gc" -> "30000",
+    "task_lost_expunge_initial_delay" -> "1000",
+    "task_lost_expunge_interval" -> "1000"
+  )
+
+  before {
+    mesosCluster.agents(1).stop()
+    mesosCluster.masters(1).stop()
+    mesosCluster.masters.head.start()
+    mesosCluster.agents.head.start()
+    mesosCluster.waitForLeader().futureValue
+  }
+
+  test("A task lost with mesos master failover will not kill the task - https://github.com/mesosphere/marathon/issues/4214") {
+    Given("a new app")
+    val strategy = UnreachableStrategy(5.minutes, 10.minutes)
+    val app = appProxy(testBasePath / "app", "v1", instances = 1).copy(unreachableStrategy = strategy)
+    waitForDeployment(marathon.createAppV2(app))
+    val task = waitForTasks(app.id, 1).head
+
+    When("We stop the slave, the task is declared unreachable")
+    mesosCluster.agents.head.stop()
+    waitForEventMatching("Task is declared unreachable") { matchEvent("TASK_UNREACHABLE", task) }
+
+    And("The task is not removed from the task list")
+    val lost = waitForTasks(app.id, 1).head
+    lost.state should be("TASK_UNREACHABLE")
+
+    When("We do a Mesos Master failover and start the slave again")
+    mesosCluster.masters(1).start()
+    mesosCluster.masters.head.stop()
+    mesosCluster.agents.head.start()
+
+    Then("The task reappears as running")
+    waitForEventMatching("Task is declared running again") { matchEvent("TASK_RUNNING", task) }
+  }
+
+  def matchEvent(status: String, task: ITEnrichedTask): CallbackEvent => Boolean = { event =>
+    event.info.get("taskStatus").contains(status) &&
+      event.info.get("taskId").contains(task.id)
   }
 }
