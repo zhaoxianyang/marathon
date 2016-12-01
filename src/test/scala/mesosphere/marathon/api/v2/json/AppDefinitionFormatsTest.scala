@@ -478,6 +478,17 @@ class AppDefinitionFormatsTest
     appDef.killSelection should be(KillSelection.YoungestFirst)
   }
 
+  test("FromJSON should fail for invalid kill selection") {
+    val json = Json.parse(
+      """{
+        |  "id": "test",
+        |  "killSelection": "unknown"
+        |}""".stripMargin)
+    the[JsResultException] thrownBy {
+      json.as[AppDefinition]
+    } should have message ("JsResultException(errors:List((/killSelection,List(ValidationError(List(error.expected.jsstring),WrappedArray(KillSelection (YoungestFirst, OldestFirst)))))))")
+  }
+
   test("ToJSON should serialize kill selection") {
     val appDef = AppDefinition(id = PathId("test"), killSelection = KillSelection.OldestFirst)
 

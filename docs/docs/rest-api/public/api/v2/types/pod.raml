@@ -111,6 +111,7 @@ types:
       backoff?: PodSchedulingBackoffStrategy
       upgrade?: PodUpgradeStrategy
       placement?: PodPlacementPolicy
+      killSelection?: killSelection.KillSelection
   Pod:
     description: |
       A pod allows one to launch a collection co-located (on the same agent) containers
@@ -148,7 +149,6 @@ types:
           At this time, only one stack is supported.
       scaling?: PodScalingPolicy
       scheduling?: PodSchedulingPolicy
-      killSelection?: killSelection.KillSelection
       unreachableStrategy?: unreachableStrategy.UnreachableStrategy
       executorResources?:
           type: resources.ExecutorResources

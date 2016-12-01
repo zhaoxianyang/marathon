@@ -11,18 +11,6 @@ class InstanceFormatTest extends UnitTest {
 
   import Instance._
 
-  //  "Instance.KillSelectionFormat" should {
-  //    "create a proper JSON object from YoungestFirst" in {
-  //      val json = Json.toJson(UnreachableStrategy.KillSelection.YoungestFirst)
-  //      json.as[String] should be("YoungestFirst")
-  //    }
-  //
-  //    "create a proper JSON object from OldestFirst" in {
-  //      val json = Json.toJson(UnreachableStrategy.KillSelection.OldestFirst)
-  //      json.as[String] should be("OldestFirst")
-  //    }
-  //  }
-
   "Instance.unreachableStrategyFormat" should {
     "parse a proper JSON" in {
       val json = Json.parse("""{ "unreachableInactiveAfter": 1, "unreachableExpungeAfter": 2 }""")
@@ -35,12 +23,6 @@ class InstanceFormatTest extends UnitTest {
       a[JsResultException] should be thrownBy { json.as[UnreachableStrategy] }
     }
 
-    //    "fail on an invalid kill selection" in {
-    //      val json = Json.parse("""{ "unreachableInactiveAfter": 1, "unreachableExpungeAfter": 2, "killSelection": "youngestFirst" }""")
-    //      the[JsResultException] thrownBy {
-    //        json.as[UnreachableStrategy]
-    //      } should have message ("JsResultException(errors:List((/killSelection,List(ValidationError(List(There is no KillSelection with name 'youngestFirst'),WrappedArray())))))")
-    //    }
   }
 
   "Instance.instanceFormat" should {

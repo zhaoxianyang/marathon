@@ -26,7 +26,9 @@ trait PodConversion extends NetworkConversion with ConstraintConversion with Con
     }
 
     val unreachableStrategy = podDef.unreachableStrategy.fold(DefaultUnreachableStrategy)(Raml.fromRaml(_))
-    val killSelection: state.KillSelection = podDef.killSelection.fold(state.KillSelection.DefaultKillSelection)(Raml.fromRaml(_))
+    val killSelection: state.KillSelection = podDef.scheduling.fold(state.KillSelection.DefaultKillSelection) {
+      _.killSelection.fold(state.KillSelection.DefaultKillSelection)(Raml.fromRaml(_))
+    }
 
     val backoffStrategy = podDef.scheduling.flatMap { policy =>
       policy.backoff.map { strategy =>
