@@ -4,6 +4,7 @@ package integration
 import mesosphere.AkkaIntegrationFunTest
 import mesosphere.marathon.integration.setup._
 import mesosphere.marathon.raml.App
+import mesosphere.marathon.state.PathId._
 
 import scala.concurrent.duration._
 
@@ -36,7 +37,7 @@ class LaunchQueueIntegrationTest extends AkkaIntegrationFunTest with EmbeddedMar
 
     val queue = response.value.queue
     queue should have size 1
-    queue.head.app.id should be (appId)
+    queue.head.app.id.toPath should be (appId)
     queue.head.count should be (5)
   }
 }

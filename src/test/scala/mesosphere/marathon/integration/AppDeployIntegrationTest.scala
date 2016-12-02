@@ -392,7 +392,7 @@ class AppDeployIntegrationTest
     Then("The response should contain all the versions")
     list.code should be (200)
     list.value.versions should have size 1
-    list.value.versions.head should be (createResponse.value.version)
+    list.value.versions.headOption should be (createResponse.value.version)
   }
 
   test("correctly version apps") {
